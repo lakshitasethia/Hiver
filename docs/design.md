@@ -117,13 +117,21 @@ Finalised intents (v1): `order_status`, `delivery_issue`, `billing_dispute`,
   reply from the single nearest resolved conversation verbatim.
 
 ### 3.6 LLM client (`llm/`)
-`LLMClient` protocol: `complete(prompt, *, system, temperature, response_schema)`.
-- `GeminiClient` — Google AI Studio, `gemini-flash-latest` (an alias that tracks
-  the current Flash model; pin a version via `SUPPORT_AGENT_LLM_MODEL`), free tier. Reads
-  `GOOGLE_API_KEY`. Retries with backoff on 429/5xx; hard timeout.
-- `FakeLLM` — deterministic, rule-driven responses for tests and for the
-  no-key demo. Keyed off the prompt so classification/judge tests are stable.
-Selected by `make_llm()` from env; everything downstream is client-agnostic.
+`LLMClient` protocol: `complete(prompt, *, system, temperature, json_mode)`.
+- `GroqClient` — Groq API (OpenAI-shaped), default `openai/gpt-oss-20b`. Reads
+  `GROQ_API_KEY`. The recommended backend: the free tier (~1000 req/day,
+  ~8k tokens/min per model) is large enough to run the full evaluation. Honours
+  the `retry-after` hint on 429s; optional `min_interval_s` throttle for long runs.
+- `GeminiClient` — Google AI Studio, default `gemini-flash-lite-latest`. Reads
+  `GOOGLE_API_KEY`. Works, but the free tier is ~20 req/day/model, so useful only
+  for a small run. Same retry/throttle behaviour.
+- `FakeLLM` — deterministic, rule-driven responses for tests, CI, and the no-key
+  demo. Dispatches on the prompt (classify → JSON label, generate → templated
+  reply from the exemplar, judge → rubric JSON) so it exercises real control flow.
+- `make_llm()` resolves `auto` as **Groq → Gemini → fake** by which key is
+  present. `make_judge_llm()` lets the LLM-judge run on a different model family
+  (`SUPPORT_AGENT_JUDGE_MODEL`, e.g. `qwen/qwen3.8-27b`) from the generator, to
+  reduce self-preference bias. Everything downstream is client-agnostic.
 
 ### 3.7 Escalation (`escalate/`)
 - `signals.py` — pure functions producing a `Signals` dataclass:

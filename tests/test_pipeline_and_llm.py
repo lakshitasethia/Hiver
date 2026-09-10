@@ -26,9 +26,60 @@ def test_fake_llm_judge_dispatch():
 
 
 def test_factory_returns_fake_without_key(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.setenv("SUPPORT_AGENT_LLM", "auto")
-    assert "fake" in factory_make().name
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert "fake" in factory_make("auto").name
+
+
+def test_factory_auto_prefers_groq(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    import sys
+    import types as _t
+
+    stub = _t.ModuleType("groq")
+    stub.Groq = lambda **kw: object()
+    monkeypatch.setitem(sys.modules, "groq", stub)
+    assert factory_make("auto").name.startswith("groq:")
+
+
+def test_groq_client_shapes_request(monkeypatch):
+    """GroqClient builds an OpenAI-style call and parses the response."""
+    import sys
+    import types as _t
+
+    seen = {}
+
+    class _Resp:
+        def __init__(self):
+            self.choices = [_t.SimpleNamespace(message=_t.SimpleNamespace(content=' {"intent": "cancellation"} '))]
+            self.usage = _t.SimpleNamespace(prompt_tokens=11, completion_tokens=7)
+
+    class _Client:
+        def __init__(self, **kw):
+            self.chat = _t.SimpleNamespace(
+                completions=_t.SimpleNamespace(create=self._create)
+            )
+
+        def _create(self, **kw):
+            seen.update(kw)
+            return _Resp()
+
+    stub = _t.ModuleType("groq")
+    stub.Groq = _Client
+    monkeypatch.setitem(sys.modules, "groq", stub)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    from support_agent.llm.groq import GroqClient
+
+    c = GroqClient(model="openai/gpt-oss-20b")
+    out = c.complete("classify this", system="be terse", temperature=0.0, json_mode=True)
+    assert out.text == '{"intent": "cancellation"}'
+    assert out.prompt_tokens == 11 and out.completion_tokens == 7
+    assert seen["response_format"] == {"type": "json_object"}
+    assert seen["reasoning_effort"] == "low"  # gpt-oss path
+    assert seen["messages"][0] == {"role": "system", "content": "be terse"}
 
 
 def test_pipeline_triage_smoke(corpus, tmp_path):

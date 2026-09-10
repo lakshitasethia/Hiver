@@ -33,8 +33,11 @@ def _md_table(headers: list[str], rows: list[list]) -> str:
 
 def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
     p = cls["primary"]
+    judge_note = (
+        f" · judge=`{meta['judge_llm']}`" if meta.get("judge_llm") and meta["judge_llm"] != meta["llm"] else ""
+    )
     parts = [f"_Generated {meta['generated_at']} · {meta['n_labelset']} labelled examples "
-             f"· embedder=`{meta['embedder']}` · llm=`{meta['llm']}`_", ""]
+             f"· embedder=`{meta['embedder']}` · llm=`{meta['llm']}`{judge_note}_", ""]
 
     # Classification
     parts.append("### Classification\n")
@@ -118,13 +121,14 @@ def run_and_render(
     esc = run_escalation.evaluate(rows)
 
     from support_agent.embeddings import make_embedder
-    from support_agent.llm import make_llm
+    from support_agent.llm import make_judge_llm, make_llm
 
     meta = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "n_labelset": len(rows),
         "embedder": make_embedder().name,
         "llm": make_llm().name,
+        "judge_llm": make_judge_llm().name,
         "python": platform.python_version(),
     }
     payload = {"meta": meta, "classification": cls, "generation": gen, "escalation": esc}

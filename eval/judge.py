@@ -18,7 +18,7 @@ import random
 import re
 
 from support_agent.config import RANDOM_SEED
-from support_agent.llm import LLMClient, make_llm
+from support_agent.llm import LLMClient, make_judge_llm
 
 _RUBRIC_SYSTEM = (
     "You are a strict QA reviewer for customer-support replies. Score honestly; "
@@ -70,7 +70,7 @@ def _parse_json(text: str) -> dict:
 
 class ReplyJudge:
     def __init__(self, llm: LLMClient | None = None, seed: int = RANDOM_SEED):
-        self.llm = llm or make_llm()
+        self.llm = llm or make_judge_llm()
         self.rng = random.Random(seed)
 
     def score(self, message: str, reply: str) -> dict:

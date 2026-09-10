@@ -35,7 +35,7 @@ def evaluate(
     convs = load_sample()
     retriever = ReplyRetriever.build(convs, embedder=emb)
     gen = ReplyGenerator(make_llm())
-    judge = ReplyJudge(make_llm()) if use_judge else None
+    judge = ReplyJudge() if use_judge else None  # ReplyJudge picks its own (possibly different) model
     ref_map = reference_by_id or {c.conv_id: c.last_agent_text for c in convs}
 
     rag_sims, base_sims = [], []
