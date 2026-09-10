@@ -9,13 +9,15 @@ dist/
 .cache/
 models/*.joblib
 models/*.json
+# committed on purpose: the cross-brand classifier used for the AmazonHelp run,
+# so classification + escalation headline numbers reproduce with no training step
+!models/clf.real.joblib
+!models/clf.real.json
 eval/results/
 data/conversations.jsonl
-data/amazonhelp.jsonl
 data/twcs.csv
 data/sample.csv
 data/*.zip
-models/clf.real.joblib
 models/clf.amazon.joblib
 .env
 .DS_Store

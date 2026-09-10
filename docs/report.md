@@ -19,9 +19,10 @@ live generation run down mid-session — so ignore them; the **real generation
 numbers** (two Groq runs, `n≈60` each, plus a judge-vs-human agreement study on
 25 AmazonHelp replies) are in §4 "Reading the run" and §6, with sources. The
 zero-shot classification baseline cell is likewise the fake; the real
-cross-dataset figure is quoted below. `make eval` with no key reproduces every
-suite offline on the synthetic set (the CI path); the real AmazonHelp run is one
-command, in the README.
+cross-dataset figure is quoted below. **`make eval-amazon`** reproduces the
+classification and escalation numbers here in ~30 s with no Kaggle download and
+no API key (`data/amazonhelp.jsonl` and `models/clf.real.joblib` are committed);
+generation needs a Groq key.
 
 ## 1. Problem framing: what "good" means for AmazonHelp
 

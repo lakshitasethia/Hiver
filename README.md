@@ -27,48 +27,49 @@ attribution) · [`docs/decisions.md`](docs/decisions.md) (13 decisions) ·
 
 ---
 
-## Quick start — no credentials, under 15 minutes
+## Reproduce the headline numbers — under 15 minutes, no credentials
 
 ```bash
-make setup          # venv + pip install                    (~3–5 min)
-make data-sample    # generate the committed offline corpus  (instant)
-make train          # weak-label + train the classifier      (~1 min)
-make labelset       # build the synthetic 200-example eval set
-make demo           # triage 5 example messages end-to-end
-make test           # 55 tests, deterministic, no network
-make eval           # run all three suites offline -> docs/report.md
+make setup          # venv + pip install                                (~3–5 min)
+make eval-amazon    # classification + escalation on 200 hand-labelled   (~30 sec)
+                    #   AmazonHelp messages — no Kaggle download, no API key
+make test           # 55 tests, deterministic, offline                   (~1 min)
 ```
 
-`make demo` / `make test` pin the fully-offline backends
-(`SUPPORT_AGENT_EMBEDDER=hashing`, `SUPPORT_AGENT_LLM=fake`): no model download,
-no API key, byte-reproducible. That is also what CI runs. The headline numbers in
-[`docs/report.md`](docs/report.md) come from the **real AmazonHelp run** below.
+`data/amazonhelp.jsonl` (the brand slice) and `models/clf.real.joblib` (the
+classifier) are committed, so `make eval-amazon` prints the report's headline
+**classification** (logreg macro-F1 0.35 vs majority-class 0.06) and
+**escalation** (rule-engine cost 106 vs trivial always-escalate 71) numbers with
+nothing to download. Full analysis: [`docs/report.md`](docs/report.md) §4–6.
 
-## The real AmazonHelp run (headline numbers)
+The **generation** headline (RAG beats verbatim retrieval 32–3 / 45–3 in blind
+pairwise) needs a Groq key — see below. Everything (`make test`, `make eval`, CI)
+runs fully offline with deterministic backends; `make demo` triages 5 example
+messages end-to-end.
 
-| To get… | Set (any one) | Where |
-|---|---|---|
-| Real replies, LLM-judge, zero-shot classification baseline | **`GROQ_API_KEY`** (recommended — generous free tier) | <https://console.groq.com/keys> |
-| " (alternative; free tier is only ~20 req/day/model) | `GOOGLE_API_KEY` | <https://aistudio.google.com/apikey> |
-| The Kaggle "Customer Support on Twitter" dataset | `KAGGLE_API_TOKEN` / `~/.kaggle/access_token` / `~/.kaggle/kaggle.json` | <https://www.kaggle.com/settings> |
+## Filling in the generation headline (needs a Groq key)
+
+Classification and escalation reproduce offline (above). For the **generation**
+comparison and the **LLM-judge ↔ human agreement** numbers:
 
 ```bash
-cp .env.example .env         # paste GROQ_API_KEY and KAGGLE_API_TOKEN
-make data                    # download + thread the full dataset
-make data-amazon             # filter to AmazonHelp -> data/amazonhelp.jsonl
-python -m support_agent.train --data data/conversations.jsonl --out models/clf.real.joblib
+cp .env.example .env                       # paste GROQ_API_KEY (free: console.groq.com/keys)
 
 python -m eval.report --labelset eval/labelset/labels.amazon.jsonl \
-                      --data data/amazonhelp.jsonl --model models/clf.real.joblib --gen-limit 70
-python -m eval.judge_agreement          # LLM-judge vs human agreement
+       --data data/amazonhelp.jsonl --model models/clf.real.joblib --gen-limit 40
+python -m eval.judge_agreement             # judge vs human on 25 pre-scored pairs
 ```
 
-`eval/labelset/labels.amazon.jsonl` (200 AmazonHelp messages, hand-labelled) is
-committed, so the classification and escalation numbers reproduce as soon as you
-have the dataset; generation additionally needs a Groq key. The `auto` LLM
-backend resolves **Groq → Gemini → offline fake**; the judge runs on a
-*different* family (`SUPPORT_AGENT_JUDGE_MODEL`, default `qwen/qwen3.8-27b`) from
-the generator (`openai/gpt-oss-20b`) to blunt "model grades its own output" bias.
+Groq's free tier rate-limits on tokens/minute, so `--gen-limit 40` takes
+~15–40 min; that is why the committed report block shows the offline fake for
+generation and quotes the real numbers (from two earlier logged runs) in §4.
+The `auto` LLM backend resolves **Groq → Gemini → offline fake**; the judge runs
+on a *different* family (`qwen/qwen3.8-27b`) from the generator
+(`openai/gpt-oss-20b`) to blunt "model grades its own output" bias.
+
+_Rebuilding the classifier from scratch:_ `make data && make data-amazon &&
+python -m support_agent.train --data data/conversations.jsonl --out models/clf.real.joblib`
+(needs a Kaggle token). Not required — `models/clf.real.joblib` is committed.
 
 ## How it works
 

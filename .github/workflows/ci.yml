@@ -31,3 +31,8 @@ jobs:
         run: pytest -q
       - name: eval harness runs end-to-end (offline; does not touch docs/report.md)
         run: python -m eval.report --no-report
+
+      - name: AmazonHelp headline reproduces from the committed data + model
+        env:
+          SUPPORT_AGENT_EMBEDDER: st       # match models/clf.real.joblib (MiniLM)
+        run: make eval-amazon

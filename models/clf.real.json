@@ -1,0 +1,21 @@
+{
+  "n_train": 5900,
+  "n_classes": 10,
+  "label_counts": {
+    "account_access": 126,
+    "billing_dispute": 649,
+    "cancellation": 84,
+    "complaint_feedback": 1347,
+    "delivery_issue": 57,
+    "order_status": 350,
+    "other_unclear": 425,
+    "praise_thanks": 2278,
+    "product_question": 25,
+    "technical_bug": 559
+  },
+  "cv_macro_f1": 0.7022,
+  "cv_accuracy": 0.8086,
+  "embedder": "all-MiniLM-L6-v2",
+  "data_sha1": "e059cc690446c41529ceb3e8c7e85116dfc19bc6",
+  "trained_at": "2026-09-10T03:55:37+00:00"
+}
