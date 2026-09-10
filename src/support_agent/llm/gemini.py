@@ -25,7 +25,7 @@ class GeminiClient:
 
     def __init__(
         self,
-        model: str = "gemini-flash-latest",
+        model: str = "gemini-flash-lite-latest",
         *,
         api_key: str | None = None,
         timeout_s: float = 30.0,

@@ -12,6 +12,8 @@ models/*.json
 eval/results/
 data/conversations.jsonl
 data/twcs.csv
+data/sample.csv
 data/*.zip
+models/clf.real.joblib
 .env
 .DS_Store

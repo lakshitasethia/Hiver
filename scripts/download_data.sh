@@ -2,10 +2,21 @@
 # Download the Kaggle "Customer Support on Twitter" dataset and thread it into
 # data/conversations.jsonl (the format load_conversations / the pipeline expect).
 #
-# Prereqs: a Kaggle account + API token. Either:
-#   - ~/.kaggle/kaggle.json  (chmod 600), or
-#   - KAGGLE_USERNAME / KAGGLE_KEY env vars (see .env.example)
+# Prereqs: a Kaggle account + API credentials, any one of:
+#   - KAGGLE_API_TOKEN=KGAT_...            (newer access-token style), or
+#   - ~/.kaggle/access_token  containing that KGAT_... token (chmod 600), or
+#   - ~/.kaggle/kaggle.json   {"username":..., "key":...}   (classic), or
+#   - KAGGLE_USERNAME / KAGGLE_KEY env vars
+# Or skip auth entirely: download twcs.csv by hand from the dataset page and drop
+# it at data/twcs.csv, then just run this script to do the threading step.
 set -euo pipefail
+
+# The kaggle CLI reads KAGGLE_API_TOKEN from the environment; also honour the
+# ~/.kaggle/access_token file if that is where the token was saved.
+if [[ -z "${KAGGLE_API_TOKEN:-}" && -f "${HOME}/.kaggle/access_token" ]]; then
+  KAGGLE_API_TOKEN="$(tr -d '[:space:]' < "${HOME}/.kaggle/access_token")"
+  export KAGGLE_API_TOKEN
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="${ROOT}/.venv/bin/python"

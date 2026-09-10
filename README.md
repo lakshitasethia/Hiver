@@ -34,24 +34,27 @@ network and no API key.
 
 ## Running it for real
 
-Two optional credentials unlock the real quality numbers:
+Two optional credentials unlock the real dataset and the real LLM:
 
-| Want | Set | Get it |
+| Want | Set (any one) | Get it |
 |---|---|---|
-| Real reply generation, LLM-judge, and the zero-shot classification baseline | `GOOGLE_API_KEY` | free at <https://aistudio.google.com/apikey> |
-| The real Kaggle dataset instead of the synthetic sample | `~/.kaggle/kaggle.json` | <https://www.kaggle.com/settings> → "Create New Token" |
+| Real reply generation, LLM-judge, zero-shot classification baseline | `GOOGLE_API_KEY` | free at <https://aistudio.google.com/apikey> — note the free tier is ~20 requests/day/model |
+| The real Kaggle "Customer Support on Twitter" dataset | `KAGGLE_API_TOKEN=KGAT_…` · or `~/.kaggle/access_token` · or classic `~/.kaggle/kaggle.json` | <https://www.kaggle.com/settings> → "Create New Token"; or just download `twcs.csv` by hand → `data/twcs.csv` (no auth) |
 
 ```bash
-cp .env.example .env      # paste GOOGLE_API_KEY, leave the rest
-make data                 # download + thread the Kaggle "Customer Support on Twitter" set
-SUPPORT_AGENT_EMBEDDER=st make train        # train on real data with local embeddings
-make labelset             # re-seed; then hand-correct per docs/labeling-guide.md
-SUPPORT_AGENT_EMBEDDER=st make eval         # real classification + escalation numbers
-SUPPORT_AGENT_EMBEDDER=st make eval         # with GOOGLE_API_KEY set: real generation + judge too
+cp .env.example .env                          # paste GOOGLE_API_KEY / KAGGLE_API_TOKEN
+make data                                     # download + thread ~40k real conversations
+python -m support_agent.train --data data/conversations.jsonl --out models/clf.real.joblib
+python -m eval.make_labelset --data data/conversations.jsonl --unlabelled   # 200-row seed
+#   ^ then hand-label intent + should_escalate per docs/labeling-guide.md
+python -m eval.report                          # real classification + escalation numbers
+#   with GOOGLE_API_KEY set and quota available -> real generation + judge too
 ```
 
 Nothing about the code changes between the synthetic and real paths — only the
-data file and the two env toggles.
+data file and env toggles. See [`docs/real-data-notes.md`](docs/real-data-notes.md)
+for what the real run already showed (weak-label coverage drops to ~16%, the
+taxonomy still holds, and a 6-message real-Gemini walkthrough).
 
 ## CLI
 
@@ -88,17 +91,18 @@ docs/
   report.md            findings: baselines, 5 failure modes, metric limits, roadmap
   decisions.md         12 non-obvious decisions and why
   labeling-guide.md    how the eval set is labelled
+  real-data-notes.md   what the real Kaggle run showed (weak-label collapse, real Gemini walkthrough)
 ```
 
 ## Deliverables map
 
 | Assignment ask | Here |
 |---|---|
-| Reproducible repo, < 15 min setup | this file + `Makefile` + `.github/workflows/ci.yml` |
+| Reproducible repo, < 15 min setup | this file + `Makefile` + `ci/ci.yml` (GitHub Actions; see `ci/README.md` to activate) |
 | Intent categorisation | `src/support_agent/classify/`, `taxonomy/` |
 | Historical-pattern response generation | `src/support_agent/generate/` |
 | Auto-respond vs escalate + reasoning | `src/support_agent/escalate/` |
-| Manually-labelled eval set (150–250) | `eval/labelset/labels.jsonl` (200) + `docs/labeling-guide.md` |
+| Manually-labelled eval set (150–250) | `eval/labelset/labels.jsonl` (200, synthetic w/ gold) + `labels.real.unlabelled.jsonl` (200 real, to label) + `docs/labeling-guide.md` |
 | Automated metrics + LLM quality assessment | `eval/run_*.py`, `eval/judge.py` |
-| Report: framing, baselines, 5 failure modes, metric limits, roadmap | `docs/report.md` |
+| Report: framing, baselines, 5 failure modes, metric limits, roadmap | `docs/report.md` (+ `docs/real-data-notes.md`) |
 | 10–15 non-obvious decisions | `docs/decisions.md` |
