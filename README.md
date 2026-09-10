@@ -108,7 +108,7 @@ inbound message ─▶│  normalise   │  mask @handles / URLs / PII, gate lan
 | Escalation | Ordered rule engine over explicit signals; first match wins; whole trace returned | No second black box; every decision is auditable |
 | LLM | `LLMClient` protocol; Groq / Gemini / deterministic Fake | Provider-swappable; CI and tests run fully offline |
 
-Full detail in [`docs/design.md`](docs/design.md); the 12 non-obvious decisions
+Full detail in [`docs/design.md`](docs/design.md); the 13 non-obvious decisions
 (and the alternatives rejected) are in [`docs/decisions.md`](docs/decisions.md).
 
 ## Project layout
@@ -126,17 +126,21 @@ src/support_agent/
   pipeline.py          message -> Triage (intent + reply + decision + trace)
   cli.py               support-agent {demo,triage,classify,eval}
 eval/
-  make_labelset.py     build eval/labelset/labels.jsonl
+  make_labelset.py     seed a label set from a dataset
+  label_cli.py         keystroke-driven interactive labeller (resumable)
   run_classification.py / run_generation.py / run_escalation.py
   judge.py             LLM-as-judge (rubric + randomised pairwise)
-  tune_thresholds.py   pick escalation thresholds on the dev split
-  report.py            run everything -> docs/report.md results block
+  judge_agreement.py   judge-vs-human agreement on 25 pre-scored pairs
+  tune_thresholds.py   pick escalation thresholds on a dev split
+  report.py            run every suite -> docs/report.md results block
+  labelset/labels.amazon.jsonl   200 hand-labelled AmazonHelp messages (the golden set)
 docs/
   design.md            architecture spec
-  report.md            findings: baselines, 5 failure modes, metric limits, roadmap
-  decisions.md         12 non-obvious decisions and why
-  real-data-notes.md   what the real 40k-thread Kaggle run showed
-  labeling-guide.md    how the eval set is labelled
+  report.md            framing · baselines · 5 failure modes · "what is misleading about
+                       my headline number?" · one-more-week · attribution
+  decisions.md         13 non-obvious decisions and why
+  real-data-notes.md   the raw-data journey to the AmazonHelp numbers
+  labeling-guide.md    how the golden set was sampled and labelled
 ```
 
 ## CLI
@@ -152,18 +156,19 @@ support-agent triage --file messages.jsonl      # {"id","text","brand","history"
 
 | Assignment ask | Here |
 |---|---|
-| Reproducible repo, < 15 min setup | this file · `Makefile` · `.github/workflows/ci.yml` |
-| Intent categorisation | `src/support_agent/classify/`, `taxonomy/` |
-| Historical-pattern response generation | `src/support_agent/generate/` |
-| Auto-respond vs escalate + reasoning | `src/support_agent/escalate/` |
-| Manually-labelled eval set (150–250) + sampling note | **`eval/labelset/labels.amazon.jsonl`** (200 AmazonHelp, hand-labelled) + `docs/labeling-guide.md` (§"How it is produced") |
-| LLM-judge ↔ human agreement | `eval/judge_agreement.py` + `eval/judge_agreement_pairs.jsonl` (25 pairs, human-scored); result in `docs/report.md` §4 |
-| Baselines: trivial + simple, per task | `docs/report.md` §3 & §4 (majority-class / canned reply / always-escalate, plus LLM zero-shot / verbatim retrieval / confidence-threshold) |
-| Automated metrics + LLM quality assessment | `eval/run_*.py`, `eval/judge.py` |
-| Performance vs baselines | zero-shot LLM (classification) · verbatim retrieval (generation) · confidence-threshold (escalation) — all in `docs/report.md` |
-| Report: framing, 5 failure modes, metric limits, roadmap | `docs/report.md` (+ `docs/real-data-notes.md`) |
-| 10–15 non-obvious decisions | `docs/decisions.md` |
+| Reproducible repo; README reproduces headline results < 15 min | `make setup && make eval-amazon` (~4 min, no credentials); CI runs it |
+| Pick one brand; classify · draft reply · auto-vs-escalate + reason | AmazonHelp; `classify/` + `taxonomy/` · `generate/` · `escalate/` |
+| Manually-labelled eval set (150–250) + sampling note | **`eval/labelset/labels.amazon.jsonl`** (200 AmazonHelp) + `docs/labeling-guide.md` (top section) |
+| Automated metrics + LLM-judge rubric + **judge↔human agreement** | `eval/run_*.py`, `eval/judge.py`, `eval/judge_agreement.py` (25 human-scored pairs; result in `docs/report.md` §4) |
+| Results vs a **trivial** and a **simple** baseline, each task | `docs/report.md` §3–4: majority-class / canned reply / always-escalate  +  LLM zero-shot / verbatim retrieval / confidence-threshold |
+| Report: framing + what-not-built · results vs baselines · 5 failure modes w/ examples · **"What is misleading about my headline number?"** · one-more-week · attribution | `docs/report.md` (§§1–8) |
+| 10–15 non-obvious decisions | `docs/decisions.md` (13) |
 
-## License
+## License & data
 
-MIT — see [`LICENSE`](LICENSE). Dataset is CC-BY-NC-SA-4.0 (not redistributed here).
+Code: MIT ([`LICENSE`](LICENSE)). `data/amazonhelp.jsonl` is a 4,054-thread
+subsample of the Kaggle "Customer Support on Twitter" dataset
+(`thoughtvector/customer-support-on-twitter`), redistributed here under its
+**CC-BY-NC-SA-4.0** licence with attribution — the assignment explicitly permits
+and encourages a subsample. `models/clf.real.joblib` is a classifier trained on
+the full dataset, included so the headline reproduces without a Kaggle download.
