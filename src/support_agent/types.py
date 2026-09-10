@@ -89,6 +89,8 @@ class Signals:
     retrieval_max_sim: float
     pii_flags: list[str] = field(default_factory=list)
     compliance_hits: list[str] = field(default_factory=list)
+    severity_hits: list[str] = field(default_factory=list)   # safety / theft / repeated-failure / demand
+    high_risk_mass: float = 0.0       # total classifier probability on any high-risk intent
     is_non_english: bool = False
     history_len: int = 0
 

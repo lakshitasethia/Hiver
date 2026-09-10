@@ -5,14 +5,18 @@ order; the **first firing rule wins** and supplies the human-facing reason. The
 full trace (every rule's truth value) is returned too, so a reviewer can see not
 just why we escalated but also which other rules were close.
 
-Ordering rationale: irreversible / regulated situations first (non-English we
-can't read, compliance/legal, money & account-loss intents), then "the model
-isn't sure" (low confidence/margin), then softer signals (anger on a medium-risk
-issue, weak retrieval, an ungrounded draft). Anything that survives all of them
-is safe to auto-send.
+Ordering rationale: irreversible / regulated / dangerous situations first
+(non-English we can't read, compliance/legal, a safety-or-theft severity cue,
+money & account-loss intents — including when the classifier only *suspects*
+one), then "the model isn't sure" (low confidence/margin), then softer signals
+(anger, negative sentiment on an otherwise-routine intent, weak retrieval, an
+ungrounded draft). Anything that survives all of them is safe to auto-send.
 
 Thresholds come from ``config.EscalationConfig`` and were tuned on the dev split
-by ``eval/tune_thresholds.py`` — they are not guesses.
+by ``eval/tune_thresholds.py`` — they are not guesses. The severity and
+high-risk-mass rules were added after the real-data eval (``docs/real-data-notes.md``
+§5) showed the intent-only rules auto-sending "you all stole my package" and a
+food-safety complaint.
 """
 
 from __future__ import annotations
@@ -31,6 +35,9 @@ def _low_conf(s: Signals, _r) -> bool:
     return s.clf_confidence < E.low_confidence or s.clf_margin < E.low_margin
 
 
+_ROUTINE_NEG_TIERS = {"low", "medium"}
+
+
 RULES: list[tuple[str, Predicate, str, str]] = [
     (
         "non_english",
@@ -45,11 +52,25 @@ RULES: list[tuple[str, Predicate, str, str]] = [
         "Message raises a legal / regulatory / dispute keyword ({hits}); routing to a human.",
     ),
     (
+        "severity_cue",
+        lambda s, r: bool(s.severity_hits),
+        "escalate",
+        "Message contains a safety / theft / repeated-failure / hard-demand cue ({severity}); "
+        "a human should handle it regardless of the predicted intent.",
+    ),
+    (
         "high_risk_intent",
         lambda s, r: s.intent_risk_tier == "high",
         "escalate",
         "Intent '{intent_tier_note}' is high-risk (money, account loss, or security); "
         "auto-replies here are not safe.",
+    ),
+    (
+        "high_risk_intent_suspected",
+        lambda s, r: s.high_risk_mass >= E.high_risk_mass,
+        "escalate",
+        "Classifier put {mass:.0%} of its probability on a high-risk intent even though "
+        "that was not the top pick; not safe to auto-reply.",
     ),
     (
         "low_model_confidence",
@@ -63,6 +84,14 @@ RULES: list[tuple[str, Predicate, str, str]] = [
         lambda s, r: s.anger_flag and s.intent_risk_tier == "medium",
         "escalate",
         "Customer sentiment is strongly negative on a non-trivial issue; a human touch is warranted.",
+    ),
+    (
+        "negative_sentiment_routine_intent",
+        lambda s, r: s.sentiment <= E.routine_negative_sentiment
+        and s.intent_risk_tier in _ROUTINE_NEG_TIERS,
+        "escalate",
+        "Customer is clearly unhappy ({sentiment:+.2f}) on an intent we would normally "
+        "auto-handle; a person should look before we reply.",
     ),
     (
         "weak_retrieval",
@@ -112,6 +141,9 @@ def decide(
     name, decision, reason_tpl = winner
     reason = reason_tpl.format(
         hits=", ".join(signals.compliance_hits) or "n/a",
+        severity=", ".join(signals.severity_hits) or "n/a",
+        mass=signals.high_risk_mass,
+        sentiment=signals.sentiment,
         conf=signals.clf_confidence,
         margin=signals.clf_margin,
         sim=signals.retrieval_max_sim,

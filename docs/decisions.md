@@ -61,6 +61,14 @@ value*, so a reviewer sees the whole decision surface. Order matters and is
 justified in the file: irreversible/regulated first, then "model unsure", then
 soft signals.
 
+This paid off on the real-data eval. The first run auto-sent 5 escalation-worthy
+messages; because every signal is inspectable we could read the 5, see that the
+lexicon sentiment scored "you all stole my package" as neutral, and add three
+targeted rules (`severity_cue`, `high_risk_intent_suspected`,
+`negative_sentiment_routine_intent`) that took `false_auto_send` to 0 without
+touching the rest. A learned escalation model would have needed retraining and
+offered no such handle. See `docs/real-data-notes.md` §5.
+
 ### 7. Cost-weighted escalation metric: a false auto-send costs 5× a false escalation
 
 Plain accuracy or F1 treats both errors equally. They are not equal: auto-sending

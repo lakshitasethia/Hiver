@@ -22,11 +22,19 @@ def _cost(y_true: list[bool], y_pred: list[bool]) -> dict:
     false_auto = sum(1 for t, p in zip(y_true, y_pred) if t and not p)  # missed escalation
     false_esc = sum(1 for t, p in zip(y_true, y_pred) if not t and p)   # needless escalation
     total = false_auto * c.cost_false_auto_send + false_esc * c.cost_false_escalate
+    auto_sent = [i for i, p in enumerate(y_pred) if not p]
     return {
         "false_auto_send": false_auto,
         "false_escalate": false_esc,
         "weighted_cost": round(total, 2),
         "weighted_cost_per_item": round(total / len(y_true), 3) if y_true else None,
+        # a "escalate everything" baseline scores a great cost but automates
+        # nothing — report the automation rate so that is visible.
+        "auto_send_rate": round(len(auto_sent) / len(y_pred), 3) if y_pred else None,
+        "auto_send_precision": (
+            round(sum(1 for i in auto_sent if not y_true[i]) / len(auto_sent), 3)
+            if auto_sent else None
+        ),
     }
 
 

@@ -58,14 +58,23 @@ class LLMConfig:
 class RetrievalConfig:
     k: int = 5              # exemplars shown to the generator
     k_min: int = 2          # below this many same-brand hits, allow cross-brand
-    weak_similarity: float = 0.45   # tuned: below -> escalation "weak_retrieval"
+    # tuned: below this cosine sim -> escalation "weak_retrieval". Lowered
+    # 0.45 -> 0.40 after both the synthetic and the real dev split independently
+    # asked for a lower value (eval/tune_thresholds.py).
+    weak_similarity: float = 0.40
 
 
 @dataclass(frozen=True)
 class EscalationConfig:
     low_confidence: float = 0.55    # tuned: max class prob below this -> escalate
-    low_margin: float = 0.15        # tuned: (top1 - top2) prob below this -> escalate
+    low_margin: float = 0.10        # tuned: (top1 - top2) prob below this -> escalate (0.15 -> 0.10)
     anger_sentiment: float = -0.4   # tuned: sentiment at/below this counts as "angry"
+    # Escalate when the classifier put at least this much probability mass on ANY
+    # high-risk intent, even if it was not the top pick.
+    high_risk_mass: float = 0.25
+    # Escalate a low/medium-risk intent when sentiment is at/below this — a softer
+    # net than anger_sentiment, added after the real-data eval.
+    routine_negative_sentiment: float = -0.2
     # Cost model for the escalation report: sending a bad auto-reply is much
     # worse than needlessly escalating a message a human then rubber-stamps.
     cost_false_auto_send: float = 5.0

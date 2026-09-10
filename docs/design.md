@@ -138,16 +138,21 @@ Finalised intents (v1): `order_status`, `delivery_issue`, `billing_dispute`,
   `clf_confidence`, `clf_margin`, `intent_risk_tier`, `sentiment` (lexicon-based
   −1..1), `anger_flag`, `retrieval_max_sim`, `pii_flags` (email/phone/card/order
   regexes), `compliance_hits` (keyword list: "chargeback", "GDPR", "lawyer",
-  "cancel my account", …), `is_non_english`, `history_len`.
-- `rules.py` — an **ordered, transparent** rule list. Each rule is
-  `(name, predicate, decision, reason_template)`. First match wins. Examples:
-  `non_english → escalate`, `compliance_hit → escalate`,
-  `high_risk_intent → escalate`, `low_confidence (conf<0.55 or margin<0.15) →
-  escalate`, `angry_and_medium_risk → escalate`,
-  `weak_retrieval (max_sim<0.45) → escalate`, else `auto_send`.
-  Thresholds live in `config.py` and are tuned on the dev split, not guessed.
-  The engine returns every rule's truth value so the reason is auditable, not
-  just the winning one.
+  "cancel my account", …), `severity_hits` (safety / theft / repeated-failure /
+  hard-demand regexes on the raw text — added after the real-data eval),
+  `high_risk_mass` (total classifier probability on any high-risk intent),
+  `is_non_english`, `history_len`.
+- `rules.py` — an **ordered, transparent** rule list of 11. Each rule is
+  `(name, predicate, decision, reason_template)`, first match wins:
+  `non_english`, `compliance_or_legal`, `severity_cue`, `high_risk_intent`,
+  `high_risk_intent_suspected` (mass ≥ 0.25), `low_model_confidence`
+  (conf < 0.55 or margin < 0.10), `angry_customer_medium_risk`,
+  `negative_sentiment_routine_intent` (sentiment ≤ −0.2 on a low/medium intent),
+  `weak_retrieval` (sim < 0.40), `ungrounded_draft`, `pii_present_non_high` —
+  else `auto_send`. Thresholds live in `config.py`, tuned on the dev split by
+  `eval/tune_thresholds.py` (`--labelset` to tune on the real set). The engine
+  returns every rule's truth value, so the reason is auditable, not just the
+  winner.
 
 ### 3.8 Pipeline & CLI
 - `pipeline.py` — `triage(message, brand, history) → Triage` bundling intent,

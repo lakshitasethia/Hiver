@@ -106,10 +106,14 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
             ["false auto-sends", r["false_auto_send"], b0["false_auto_send"], b1["false_auto_send"]],
             ["false escalations", r["false_escalate"], b0["false_escalate"], b1["false_escalate"]],
             ["weighted cost (5x/1x)", r["weighted_cost"], b0["weighted_cost"], b1["weighted_cost"]],
+            ["auto-send rate", r["auto_send_rate"], b0["auto_send_rate"], b1.get("auto_send_rate", "—")],
         ],
     ))
-    parts.append(f"\nCost model: a false auto-send costs "
-                 f"{CONFIG.escalation.cost_false_auto_send}x a false escalation.")
+    parts.append(
+        f"\nCost model: a false auto-send costs {CONFIG.escalation.cost_false_auto_send}x a false "
+        "escalation. Auto-send rate is shown because a policy that escalates everything scores a "
+        "great cost while automating nothing."
+    )
 
     return "\n".join(parts)
 

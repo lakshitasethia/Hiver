@@ -47,6 +47,41 @@ _COMPLIANCE = [
 
 _ANGER_PUNCT = re.compile(r"[!?]{2,}|[A-Z]{4,}")
 
+# Severity cues that make a message escalation-worthy regardless of the predicted
+# intent or the (weak) sentiment score. Added after the real-data eval showed the
+# rule engine auto-sending "you all stole my package", "out of date chicken", and
+# a store-safety complaint because the lexicon read them as neutral.
+_SEVERITY = {
+    "safety": re.compile(
+        r"\b(unsafe|not safe|feel safe|dangerous|hazard|injur|hurt|sick|ill|poison|"
+        r"out of date|expired|rotten|mould|mold|contaminat|allergic|choking)\b", re.I
+    ),
+    "theft_loss": re.compile(
+        r"\b(stole|stolen|theft|robbed|never (arrived|received|got|came|delivered)|"
+        r"missing|disappeared|lost my|taken without)\b", re.I
+    ),
+    "repeated_failure": re.compile(
+        r"\b(third time|3rd time|fourth time|again and again|every (day|time|morning)|"
+        r"still (waiting|not|no|haven'?t|hasn'?t)|for (\d+|several|many) (days|weeks|months)|"
+        r"\d+ (days|weeks) (and|now|later)|told by \d+|multiple (times|reps|agents)|"
+        r"no one (has )?(responded|replied|helped|called)|keep (getting|being))\b", re.I
+    ),
+    "demand": re.compile(
+        r"\b(contact me immediately|call me (now|immediately|back)|speak to (a )?(manager|"
+        r"supervisor|human)|need someone (to|from)|this is (unacceptable|ridiculous)|"
+        r"final notice|last (chance|warning)|escalate this)\b", re.I
+    ),
+}
+
+
+def severity_hits(text: str) -> list[str]:
+    return [name for name, pat in _SEVERITY.items() if pat.search(text)]
+
+
+def high_risk_mass(distribution: dict[str, float]) -> float:
+    """Total probability the classifier put on *any* high-risk intent."""
+    return sum(p for name, p in distribution.items() if risk_tier(name) == "high")
+
 
 def sentiment_score(text: str) -> float:
     tokens = re.findall(r"[a-z']+", text.lower())
@@ -92,6 +127,8 @@ def compute_signals(
         retrieval_max_sim=max_sim,
         pii_flags=_pii_flags(raw),
         compliance_hits=_compliance_hits(raw),
+        severity_hits=severity_hits(raw),
+        high_risk_mass=round(high_risk_mass(intent.distribution), 4),
         is_non_english=not message.is_english,
         history_len=history_len,
     )

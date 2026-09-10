@@ -152,25 +152,41 @@ in real resolved replies makes it cautious about specifics.
 
 ### Escalation
 
+**First run (intent-only rules)** exposed a real weakness: the rule engine
+auto-sent **5** escalation-worthy messages and lost on cost to a swept
+confidence threshold (45 vs 32). Reading the 5 failures, 4 of 5 had the *correct*
+predicted intent — the engine failed because a lexicon sentiment score read "you
+all stole my package", "out of date chicken", and a store-safety complaint as
+neutral, and nothing else fired.
+
+**Fixes applied** (all transparent, all in `escalate/`):
+1. `severity_cue` signal + rule — safety / theft / repeated-failure / hard-demand
+   regexes on the raw text; escalate regardless of predicted intent.
+2. `high_risk_intent_suspected` rule — escalate when the classifier put ≥25% of
+   its probability on *any* high-risk intent, not only when it was the top pick.
+3. `negative_sentiment_routine_intent` rule — escalate a low/medium-risk intent
+   when sentiment ≤ −0.2 (softer net than the anger rule).
+4. Re-tuned on the dev splits: both the synthetic (68 rows) and the real (18
+   rows) split independently asked for `low_margin` 0.15 → 0.10 and
+   `weak_similarity` 0.45 → 0.40; applied.
+5. Report now shows **auto-send rate**, so a "escalate everything" policy can no
+   longer look good on cost alone.
+
+**After the fixes** (real `n=60`, escalation suite re-run):
+
 | metric | rule engine (ours) | confidence-only @default | confidence-only @best sweep |
 |---|---|---|---|
-| precision / recall / f1 | 0.57 / 0.84 / 0.68 | 0.53 / 0.65 / 0.59 | — / — / 0.68 |
-| false auto-sends | **5** | 11 | 1 |
-| false escalations | 20 | 17 | 27 |
-| weighted cost (5×/1×) | **45** | 72 | **32** |
+| precision / recall / f1 | 0.60 / **1.00** / 0.75 | 0.53 / 0.65 / 0.59 | — / — / 0.68 |
+| false auto-sends | **0** (was 5) | 11 | 1 |
+| false escalations | 21 | 17 | 27 |
+| weighted cost (5×/1×) | **21** (was 45) | 72 | 32 |
+| auto-send rate | **0.13** | 0.38 | 0.05 |
 
-**This is the honest hit.** On synthetic data the rule engine dominated every
-confidence-only operating point (cost 12 vs 36–76). On real data it does *not*:
-its thresholds were tuned against a strong classifier, and with the real
-classifier at macro-F1 0.44 the confidence signal is too noisy — 5 escalation-
-worthy messages are confidently misclassified into a low-risk intent with decent
-retrieval, so no rule fires and they auto-send. A confidence-only threshold swept
-to 0.95 beats it on cost (32 vs 45) by escalating almost everything.
-_Fix path:_ re-run `python -m eval.tune_thresholds` on a real dev split (the
-committed `labels.real.jsonl` reserves 18 rows for it), lower `low_confidence`,
-and add a rule that escalates whenever the top-2 intents disagree on risk tier.
-The rule engine still keeps `false_auto_send` lower than the confidence-only
-*default* (5 vs 11) — it is the calibration, not the approach, that needs work.
+The engine now leads on cost (21 vs 32) and misses **nothing**, while still
+auto-sending a real 13% — the best confidence-only sweep gets its 32 by
+escalating 95% of everything (auto-send rate 0.05), which is not automation.
+The remaining 21 false escalations are `low_model_confidence` firing on a weak
+classifier; the deeper fix is classifier calibration (roadmap), not more rules.
 
 ### What is still pending
 
