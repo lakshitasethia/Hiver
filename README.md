@@ -33,40 +33,42 @@ attribution) · [`docs/decisions.md`](docs/decisions.md) (13 decisions) ·
 make setup          # venv + pip install                    (~3–5 min)
 make data-sample    # generate the committed offline corpus  (instant)
 make train          # weak-label + train the classifier      (~1 min)
-make labelset       # build the 200-example evaluation set
+make labelset       # build the synthetic 200-example eval set
 make demo           # triage 5 example messages end-to-end
-make test           # 51 tests, deterministic, no network
-make eval           # run all three eval suites -> docs/report.md
+make test           # 55 tests, deterministic, no network
+make eval           # run all three suites offline -> docs/report.md
 ```
 
 `make demo` / `make test` pin the fully-offline backends
 (`SUPPORT_AGENT_EMBEDDER=hashing`, `SUPPORT_AGENT_LLM=fake`): no model download,
-no API key, byte-reproducible. That is also what CI runs.
+no API key, byte-reproducible. That is also what CI runs. The headline numbers in
+[`docs/report.md`](docs/report.md) come from the **real AmazonHelp run** below.
 
-## Running it for real
+## The real AmazonHelp run (headline numbers)
 
 | To get… | Set (any one) | Where |
 |---|---|---|
-| Real replies, LLM-judge, zero-shot classification baseline | **`GROQ_API_KEY`** (recommended — ~1000 req/day free) | <https://console.groq.com/keys> |
-| " (alternative, but free tier is only ~20 req/day/model) | `GOOGLE_API_KEY` | <https://aistudio.google.com/apikey> |
-| The real Kaggle "Customer Support on Twitter" dataset | `KAGGLE_API_TOKEN` / `~/.kaggle/access_token` / `~/.kaggle/kaggle.json` | <https://www.kaggle.com/settings> |
+| Real replies, LLM-judge, zero-shot classification baseline | **`GROQ_API_KEY`** (recommended — generous free tier) | <https://console.groq.com/keys> |
+| " (alternative; free tier is only ~20 req/day/model) | `GOOGLE_API_KEY` | <https://aistudio.google.com/apikey> |
+| The Kaggle "Customer Support on Twitter" dataset | `KAGGLE_API_TOKEN` / `~/.kaggle/access_token` / `~/.kaggle/kaggle.json` | <https://www.kaggle.com/settings> |
 
 ```bash
-cp .env.example .env      # paste GROQ_API_KEY (and KAGGLE_API_TOKEN for real data)
-
-make data                                                          # 40k real conversations
+cp .env.example .env         # paste GROQ_API_KEY and KAGGLE_API_TOKEN
+make data                    # download + thread the full dataset
+make data-amazon             # filter to AmazonHelp -> data/amazonhelp.jsonl
 python -m support_agent.train --data data/conversations.jsonl --out models/clf.real.joblib
-python -m eval.make_labelset --data data/conversations.jsonl --unlabelled   # 200-row seed
-#   ^ hand-label intent + should_escalate per docs/labeling-guide.md
-python -m eval.report                                              # real numbers -> docs/report.md
+
+python -m eval.report --labelset eval/labelset/labels.amazon.jsonl \
+                      --data data/amazonhelp.jsonl --model models/clf.real.joblib --gen-limit 70
+python -m eval.judge_agreement          # LLM-judge vs human agreement
 ```
 
-The `auto` backend resolves **Groq → Gemini → offline fake**. The LLM-judge runs
-on a *different* model family from the generator (`SUPPORT_AGENT_JUDGE_MODEL`,
-default `qwen/qwen3.8-27b` vs generator `openai/gpt-oss-20b`) to blunt the
-"model grades its own output" bias. Nothing else changes between the synthetic
-and real paths — only the data file and env toggles. See
-[`docs/real-data-notes.md`](docs/real-data-notes.md) for what the real run showed.
+`eval/labelset/labels.amazon.jsonl` (200 AmazonHelp messages, hand-labelled) is
+committed, so the classification and escalation numbers reproduce as soon as you
+have the dataset; generation additionally needs a Groq key. The `auto` LLM
+backend resolves **Groq → Gemini → offline fake**; the judge runs on a
+*different* family (`SUPPORT_AGENT_JUDGE_MODEL`, default `qwen/qwen3.8-27b`) from
+the generator (`openai/gpt-oss-20b`) to blunt "model grades its own output" bias.
 
 ## How it works
 
@@ -153,7 +155,9 @@ support-agent triage --file messages.jsonl      # {"id","text","brand","history"
 | Intent categorisation | `src/support_agent/classify/`, `taxonomy/` |
 | Historical-pattern response generation | `src/support_agent/generate/` |
 | Auto-respond vs escalate + reasoning | `src/support_agent/escalate/` |
-| Manually-labelled eval set (150–250) | `eval/labelset/labels.jsonl` (200, synthetic gold) + `labels.real.unlabelled.jsonl` (200 real, to label) + `docs/labeling-guide.md` |
+| Manually-labelled eval set (150–250) + sampling note | **`eval/labelset/labels.amazon.jsonl`** (200 AmazonHelp, hand-labelled) + `docs/labeling-guide.md` (§"How it is produced") |
+| LLM-judge ↔ human agreement | `eval/judge_agreement.py` + `eval/judge_agreement_pairs.jsonl` (25 pairs, human-scored); result in `docs/report.md` §4 |
+| Baselines: trivial + simple, per task | `docs/report.md` §3 & §4 (majority-class / canned reply / always-escalate, plus LLM zero-shot / verbatim retrieval / confidence-threshold) |
 | Automated metrics + LLM quality assessment | `eval/run_*.py`, `eval/judge.py` |
 | Performance vs baselines | zero-shot LLM (classification) · verbatim retrieval (generation) · confidence-threshold (escalation) — all in `docs/report.md` |
 | Report: framing, 5 failure modes, metric limits, roadmap | `docs/report.md` (+ `docs/real-data-notes.md`) |

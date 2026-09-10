@@ -1,17 +1,20 @@
-# Real-data run — notes
+# Real-data notes — the road to the AmazonHelp numbers
 
-The committed metrics in [`report.md`](report.md) are on the synthetic sample
-corpus, because that is the only path with gold labels that runs in CI with no
-credentials. This file records what happened when the pipeline was pointed at the
-**real Kaggle dataset** (`thoughtvector/customer-support-on-twitter`).
+The headline numbers in [`report.md`](report.md) §4 are on **200 hand-labelled
+AmazonHelp messages**. This file is the working log behind them: what the raw
+3M-tweet Kaggle dataset looks like, why the taxonomy and the escalation rules are
+shaped the way they are, and the intermediate all-brand runs that got us there.
+`make eval` with no credentials still runs on the synthetic corpus (CI path).
 
-Reproduce:
+Reproduce the AmazonHelp run:
 
 ```bash
-KAGGLE_API_TOKEN=KGAT_...  make data      # -> data/conversations.jsonl (40k threads)
-python -m support_agent.taxonomy.discover --data data/conversations.jsonl
+KAGGLE_API_TOKEN=KGAT_...  make data       # -> data/conversations.jsonl
+make data-amazon                           # -> data/amazonhelp.jsonl (4054 threads)
+python -m support_agent.taxonomy.discover --data data/amazonhelp.jsonl
 python -m support_agent.train --data data/conversations.jsonl --out models/clf.real.joblib
-python -m eval.make_labelset --data data/conversations.jsonl --unlabelled   # seed to hand-label
+python -m eval.report --labelset eval/labelset/labels.amazon.jsonl \
+                      --data data/amazonhelp.jsonl --model models/clf.real.joblib --gen-limit 70
 ```
 
 ## 1. Dataset shape (40,000 threads, capped from ~3M tweets)
@@ -199,3 +202,18 @@ classifier; the deeper fix is classifier calibration (roadmap), not more rules.
 - **Label review.** The 60 labels were assigned by reading each message against
   the guide; a second annotator (or the guide's self-diff pass) would quantify
   inter-annotator noise, which is currently unmeasured.
+
+## 6. Then: focus on one brand (AmazonHelp)
+
+The `n=60` run above is cross-brand — useful for tuning, but the brief asks for
+**one brand**. The final evaluation ([`report.md`](report.md) §4) is on **200
+hand-labelled AmazonHelp messages**. The escalation picture there is harsher than
+the cross-brand `n=60`: because 65% of AmazonHelp tweets genuinely need a human
+and the cross-brand classifier is weak on Amazon phrasing (macro-F1 0.35), the
+rule engine (cost 106) *loses* to a trivial always-escalate baseline (cost 71).
+That is the honest headline, and §6 of the report unpacks why it does not mean
+the approach is wrong — it means auto-send is premature for this brand until the
+classifier is Amazon-tuned and calibrated. Diagnosing the 20 messages the engine
+wrongly auto-sent is what produced the CJK language gate and the
+`theft_loss` / `damaged` / `money` severity cues (commit `eec25bf`), which cut
+those misses to 10.

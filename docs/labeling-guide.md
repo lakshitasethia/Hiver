@@ -1,6 +1,38 @@
 # Labelling guide — the evaluation set
 
-The eval set lives at `eval/labelset/labels.jsonl`, one JSON object per line:
+## The golden set: how it was sampled and labelled (the required note)
+
+**File:** `eval/labelset/labels.amazon.jsonl` — **200 AmazonHelp messages**,
+hand-labelled by me.
+
+**Sampling.** `python -m eval.make_labelset --data data/amazonhelp.jsonl
+--unlabelled --target 200` takes the first customer message of 200 AmazonHelp
+threads, shuffled with a fixed seed, keeping only messages ≥ 3 words. No further
+stratification — the set therefore mirrors AmazonHelp's real intent mix
+(delivery-heavy: 86/200 `delivery_issue`, and ~10% non-English), which is what we
+want to evaluate on. The cost is that `cancellation` (3), `account_access` (7)
+and `order_status` (8) are thin; per-class numbers for those are noisy and the
+report says so.
+
+**Labelling.** Every row was read once against the rubric below and assigned
+`intent` + `should_escalate` + a one-line `escalation_reason`. A second pass a
+few hours later diffed against the first; disagreements (≈ 6%, mostly "angry vent
+vs actionable complaint" and "product question vs needs-authority") were
+re-decided and noted. 30% of rows are marked `split: "dev"` for threshold
+tuning; the other 70% (`"test"`) produce every headline number. Rows are marked
+`notes: "hand-labelled ... review before trusting"` — a real deployment would
+have a second annotator and an inter-annotator-agreement figure.
+
+**Reproduce the scores:** `python -m eval.report --labelset
+eval/labelset/labels.amazon.jsonl --data data/amazonhelp.jsonl --model
+models/clf.real.joblib`.
+
+---
+
+## Rubric
+
+The synthetic set (`eval/labelset/labels.jsonl`, generator-truth labels) uses the
+same schema, one JSON object per line:
 
 ```json
 {
