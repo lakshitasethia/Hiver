@@ -24,7 +24,21 @@ The eval set lives at `eval/labelset/labels.jsonl`, one JSON object per line:
   These rows are marked `notes: "auto-seeded ... review before trusting"`.
 - **Real Kaggle data:** `python -m eval.make_labelset --data data/conversations.jsonl --unlabelled`
   samples ~200 threads, stratified by brand, and leaves `intent` / `should_escalate`
-  blank for you to fill by hand following this guide.
+  blank for you to fill by hand.
+
+## Labelling tool
+
+`python -m eval.label_cli --in eval/labelset/labels.real.unlabelled.jsonl --out eval/labelset/labels.real.jsonl --limit 60`
+
+shows one message at a time; press `1`–`0` for the intent, `y`/`n` for
+`should_escalate`, `s` skip, `b` back, `q` save+quit. Resumable — re-run and it
+skips rows already labelled. `--limit` lets you work in batches, then
+`python -m eval.report --labelset eval/labelset/labels.real.jsonl --data data/conversations.jsonl --model models/clf.real.joblib`
+scores against what you have so far.
+
+The committed `labels.real.jsonl` (first 60 rows) was labelled by reading each
+message against this guide; treat it as a starting point and correct anything
+you disagree with — the borderline calls are noted per row.
 
 Target size: **200** (assignment asks 150–250). Stratified so every intent has
 ≥ 15 examples. 30% of rows are tagged `split: "dev"` for threshold tuning; the

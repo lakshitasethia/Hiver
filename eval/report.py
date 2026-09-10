@@ -115,23 +115,46 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
 
 
 def run_and_render(
-    *, limit: int | None = None, use_judge: bool | None = None, write_md: bool = True
+    *,
+    limit: int | None = None,
+    use_judge: bool | None = None,
+    write_md: bool = True,
+    labelset_path=None,
+    data_path: str | None = None,
+    model_path: str | None = None,
 ) -> dict:
-    rows = load_labelset()
+    from pathlib import Path
+
+    rows = load_labelset(Path(labelset_path)) if labelset_path else load_labelset()
     if limit:
         rows = rows[:limit]
     use_judge = (os.getenv("SUPPORT_AGENT_LLM", "auto") != "fake") if use_judge is None else use_judge
 
-    cls = run_classification.evaluate(rows, run_llm_baseline=True)
-    gen = run_generation.evaluate(rows, use_judge=True)  # judge respects fake LLM anyway
-    esc = run_escalation.evaluate(rows)
-
+    from support_agent.classify.model import IntentClassifier
+    from support_agent.data.load import load_jsonl, load_sample
     from support_agent.embeddings import make_embedder
+    from support_agent.generate.retriever import ReplyRetriever
     from support_agent.llm import make_judge_llm, make_llm
+
+    emb = make_embedder()
+    # Shared objects, built once. Defaults = the committed synthetic path.
+    conversations = load_jsonl(data_path) if data_path else load_sample()
+    classifier = (
+        IntentClassifier.load(model_path, embedder=emb)
+        if model_path
+        else IntentClassifier.load(embedder=emb)
+    )
+    retriever = ReplyRetriever.build(conversations, embedder=emb)
+
+    cls = run_classification.evaluate(rows, run_llm_baseline=True, classifier=classifier)
+    gen = run_generation.evaluate(rows, use_judge=True, conversations=conversations)
+    esc = run_escalation.evaluate(rows, classifier=classifier, retriever=retriever)
 
     meta = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "n_labelset": len(rows),
+        "labelset": str(labelset_path) if labelset_path else "synthetic",
+        "data": data_path or "synthetic sample",
         "embedder": make_embedder().name,
         "llm": make_llm().name,
         "judge_llm": make_judge_llm().name,
@@ -164,8 +187,17 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--no-report", action="store_true",
                     help="write eval/results/*.json only; leave docs/report.md untouched")
+    ap.add_argument("--labelset", help="path to a labels .jsonl (default: the synthetic set)")
+    ap.add_argument("--data", help="conversations .jsonl for the retrieval corpus (default: synthetic sample)")
+    ap.add_argument("--model", help="classifier .joblib (default: models/clf.joblib)")
     args = ap.parse_args()
-    run_and_render(limit=args.limit, write_md=not args.no_report)
+    run_and_render(
+        limit=args.limit,
+        write_md=not args.no_report,
+        labelset_path=args.labelset,
+        data_path=args.data,
+        model_path=args.model,
+    )
 
 
 if __name__ == "__main__":

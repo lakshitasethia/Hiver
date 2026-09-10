@@ -30,9 +30,10 @@ def evaluate(
     *,
     use_judge: bool = True,
     reference_by_id: dict[str, str] | None = None,
+    conversations=None,
 ) -> dict:
     emb = make_embedder()
-    convs = load_sample()
+    convs = conversations if conversations is not None else load_sample()
     retriever = ReplyRetriever.build(convs, embedder=emb)
     gen = ReplyGenerator(make_llm())
     judge = ReplyJudge() if use_judge else None  # ReplyJudge picks its own (possibly different) model
