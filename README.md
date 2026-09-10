@@ -98,7 +98,7 @@ docs/
 
 | Assignment ask | Here |
 |---|---|
-| Reproducible repo, < 15 min setup | this file + `Makefile` + `ci/ci.yml` (GitHub Actions; see `ci/README.md` to activate) |
+| Reproducible repo, < 15 min setup | this file + `Makefile` + `.github/workflows/ci.yml` |
 | Intent categorisation | `src/support_agent/classify/`, `taxonomy/` |
 | Historical-pattern response generation | `src/support_agent/generate/` |
 | Auto-respond vs escalate + reasoning | `src/support_agent/escalate/` |
