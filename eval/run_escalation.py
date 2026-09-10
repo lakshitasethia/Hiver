@@ -70,6 +70,9 @@ def evaluate(rows: list[LabelRow], classifier=None, retriever=None) -> dict:
         sweep.append({"threshold": thr, "f1": rep["f1"], **_cost(gold, pred)})
     best_conf = min(sweep, key=lambda s: s["weighted_cost"])
 
+    always = [True] * len(gold)   # trivial: escalate everything (no automation)
+    never = [False] * len(gold)   # trivial: auto-send everything (no safety net)
+
     return {
         "n": len(rows),
         "primary_rule_engine": {**binary_report(gold, rule_pred), **_cost(gold, rule_pred)},
@@ -78,5 +81,7 @@ def evaluate(rows: list[LabelRow], classifier=None, retriever=None) -> dict:
             "threshold": CONFIG.escalation.low_confidence,
         },
         "baseline_confidence_only_best_sweep": best_conf,
+        "baseline_trivial_always_escalate": {**binary_report(gold, always), **_cost(gold, always)},
+        "baseline_trivial_never_escalate": {**binary_report(gold, never), **_cost(gold, never)},
         "sweep": sweep,
     }

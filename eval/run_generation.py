@@ -25,6 +25,13 @@ def _cos(a: np.ndarray, b: np.ndarray) -> float:
     return float(a @ b / ((np.linalg.norm(a) * np.linalg.norm(b)) or 1.0))
 
 
+# Trivial baseline: one fixed acknowledgement, sent to everyone.
+TRIVIAL_CANNED = (
+    "Thanks for reaching out. We're sorry for any trouble here — a member of our "
+    "team will look into this and get back to you as soon as possible."
+)
+
+
 def evaluate(
     rows: list[LabelRow],
     *,
@@ -39,7 +46,7 @@ def evaluate(
     judge = ReplyJudge() if use_judge else None  # ReplyJudge picks its own (possibly different) model
     ref_map = reference_by_id or {c.conv_id: c.last_agent_text for c in convs}
 
-    rag_sims, base_sims = [], []
+    rag_sims, base_sims, canned_sims = [], [], []
     rag_grounded = 0
     n_generated = 0
     len_ratios = []
@@ -60,9 +67,10 @@ def evaluate(
         ref = ref_map.get(r.id, "")
 
         if ref:
-            v = emb.encode([ref, rag.text or " ", base.text or " "])
+            v = emb.encode([ref, rag.text or " ", base.text or " ", TRIVIAL_CANNED])
             rag_sims.append(_cos(v[0], v[1]))
             base_sims.append(_cos(v[0], v[2]))
+            canned_sims.append(_cos(v[0], v[3]))
             len_ratios.append(len(rag.text) / max(1, len(ref)))
         rag_grounded += int(rag.grounded)
 
@@ -88,6 +96,7 @@ def evaluate(
         "automated": {
             "rag_semantic_sim_to_history": _mean(rag_sims),
             "baseline_semantic_sim_to_history": _mean(base_sims),
+            "trivial_canned_semantic_sim_to_history": _mean(canned_sims),
             "rag_groundedness_rate": round(rag_grounded / n_generated, 4) if n_generated else None,
             "rag_len_ratio_vs_history": _mean(len_ratios),
         },

@@ -21,8 +21,13 @@ setup:  ## create venv and install the package (+dev deps)
 data-sample:  ## regenerate the committed credential-free sample corpus
 	$(PY) -m support_agent.data.synthetic
 
-data:  ## download the real Kaggle dataset -> data/conversations.jsonl (needs ~/.kaggle/kaggle.json)
+data:  ## download the real Kaggle dataset -> data/conversations.jsonl (needs a Kaggle token)
 	bash scripts/download_data.sh
+
+data-amazon: ## filter the real dataset to AmazonHelp -> data/amazonhelp.jsonl (the focus brand)
+	$(PY) -c "from support_agent.data.load import load_jsonl,dump_jsonl; \
+c=[x for x in load_jsonl('data/conversations.jsonl') if x.brand=='AmazonHelp']; \
+dump_jsonl(c,'data/amazonhelp.jsonl'); print(len(c),'AmazonHelp threads ->', 'data/amazonhelp.jsonl')"
 
 taxonomy:  ## run offline intent discovery (embed + cluster + top terms)
 	$(PY) -m support_agent.taxonomy.discover

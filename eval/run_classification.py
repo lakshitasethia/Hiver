@@ -40,6 +40,15 @@ def evaluate(rows: list[LabelRow], *, run_llm_baseline: bool = True, classifier=
 
     result = {"n": len(rows), "primary": clf_report}
 
+    # trivial baseline: always predict the most common intent in the eval set
+    from collections import Counter
+
+    majority = Counter(gold).most_common(1)[0][0]
+    result["baseline_trivial_majority"] = {
+        **multiclass_report(gold, [majority] * len(gold), list(INTENT_NAMES)),
+        "predicts": majority,
+    }
+
     if run_llm_baseline:
         zs = ZeroShotLLMClassifier()
         zs_pred, zs_gold, n_failed = [], [], 0

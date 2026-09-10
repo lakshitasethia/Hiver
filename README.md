@@ -2,20 +2,28 @@
 
 [![CI](https://github.com/lakshitasethia/Hiver/actions/workflows/ci.yml/badge.svg)](https://github.com/lakshitasethia/Hiver/actions/workflows/ci.yml)
 
-A transparent AI agent for customer support. For every inbound message it does three things:
+A transparent AI support agent for **`@AmazonHelp`** (Kaggle "Customer Support on
+Twitter"). For every inbound tweet it does three things:
 
-1. **Classifies** it into one of 10 self-defined intents.
-2. **Drafts a reply** in the brand's voice, grounded in similar *resolved* conversations (RAG).
-3. **Decides** `auto_send` vs `escalate` — with a plain-English reason and a full rule trace.
+1. **Classifies** it into one of 10 intents discovered from AmazonHelp's own messages.
+2. **Drafts a reply** in Amazon's support voice, grounded in similar *resolved* AmazonHelp threads (RAG).
+3. **Decides** `auto_send` vs `escalate` — with a plain-English reason and a full 11-rule trace.
 
-Built for the Hiver SDE take-home. The assignment's brief is _"the proof is worth
-more than the system"_, so every component is deliberately **inspectable**: the
-classifier is a logistic regression whose coefficients you can read, escalation is
-an ordered list of rules rather than a prompt, and the LLM is confined to reply
-wording and quality-judging behind a swappable interface. When something goes
-wrong you can point at the number or the rule that caused it — see
-[`docs/report.md`](docs/report.md) for the five failure modes that came out of
-exactly this.
+Built for the Hiver SDE take-home. The brief is _"the proof is worth more than the
+system"_, so every component is deliberately **inspectable**: the classifier is a
+logistic regression whose coefficients you can read, escalation is an ordered list
+of rules rather than a prompt, and the LLM is confined to reply wording and
+quality-judging behind a swappable interface. When something goes wrong you can
+point at the number or the rule that caused it — the real-data run
+([`docs/real-data-notes.md`](docs/real-data-notes.md)) did exactly that and the
+escalation rules were rebuilt in response.
+
+**Deliverables:** [`docs/report.md`](docs/report.md) (framing, baselines,
+5 failure modes, "what's misleading about my headline number", roadmap,
+attribution) · [`docs/decisions.md`](docs/decisions.md) (13 decisions) ·
+[`docs/design.md`](docs/design.md) · [`eval/labelset/labels.amazon.jsonl`](eval/labelset/labels.amazon.jsonl)
+(200 hand-labelled AmazonHelp messages) · [`eval/judge_agreement.py`](eval/judge_agreement.py)
+(LLM-judge vs human agreement).
 
 ---
 

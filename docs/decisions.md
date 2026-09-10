@@ -1,9 +1,23 @@
 # Non-obvious decisions
 
-Twelve choices a reasonable engineer could have made differently, and why this
+Thirteen choices a reasonable engineer could have made differently, and why this
 project made them the way it did. Each is phrased so it can be argued with.
 
 ---
+
+### 0. Focus brand: AmazonHelp, but a cross-brand classifier
+
+The brief says pick one brand. **AmazonHelp** was chosen over AppleSupport (the
+other 4k-thread brand) because its inbound mix actually spans the taxonomy —
+delivery, order status, refunds, account access, Prime cancellation, Alexa/app
+bugs, product questions — whereas Apple's is ~90% device bugs and would make the
+classification story trivial. The retrieval corpus, brand voice, evaluation set,
+and escalation tuning are all AmazonHelp-only. The **classifier** is the one
+exception: 4k Amazon threads weak-label to too few rows per class
+(`product_question` = 1, `technical_bug` = 11) to train on, so it is trained on
+the cross-brand corpus and *deployed* for Amazon. The intent taxonomy is still
+defined from AmazonHelp's own clusters. A reviewer could argue for an
+Amazon-only classifier with hand-labelled training data; that is roadmap item 1.
 
 ### 1. Logistic regression on frozen embeddings, not a fine-tuned transformer
 

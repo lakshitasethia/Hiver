@@ -42,12 +42,15 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
     # Classification
     parts.append("### Classification\n")
     base = cls.get("baseline_llm_zero_shot")
+    triv = cls.get("baseline_trivial_majority", {})
     parts.append(_md_table(
-        ["metric", "logreg (ours)", "LLM zero-shot (baseline)", "delta"],
+        ["metric", "logreg (ours)", "LLM zero-shot (simple baseline)",
+         f"majority-class (trivial → {triv.get('predicts', '?')})", "delta vs zero-shot"],
         [
             ["macro-F1", p["macro_f1"], base["macro_f1"] if base else "n/a",
-             cls.get("delta_macro_f1", "n/a")],
-            ["accuracy", p["accuracy"], base["accuracy"] if base else "n/a", ""],
+             triv.get("macro_f1", "n/a"), cls.get("delta_macro_f1", "n/a")],
+            ["accuracy", p["accuracy"], base["accuracy"] if base else "n/a",
+             triv.get("accuracy", "n/a"), ""],
         ],
     ))
     parts.append("\n**Per-class F1 (ours):**\n")
@@ -63,7 +66,7 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
     ))
 
     # Generation
-    parts.append("\n### Generation\n")
+    parts.append(f"\n### Generation  _(judged on n={gen['n']})_\n")
     if gen.get("n_gen_failed") or gen.get("n_judge_failed"):
         parts.append(
             f"_{gen.get('n_generated', gen['n'])}/{gen['n']} replies generated; "
@@ -72,12 +75,14 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
         )
     a = gen["automated"]
     parts.append(_md_table(
-        ["metric", "RAG (ours)", "retrieval-only (baseline)"],
+        ["metric", "RAG (ours)", "retrieval-only (simple baseline)", "canned reply (trivial baseline)"],
         [
             ["semantic sim to historical reply",
-             a["rag_semantic_sim_to_history"], a["baseline_semantic_sim_to_history"]],
-            ["groundedness rate (no invented specifics)", a["rag_groundedness_rate"], "1.0 (verbatim)"],
-            ["length ratio vs historical reply", a["rag_len_ratio_vs_history"], "1.0"],
+             a["rag_semantic_sim_to_history"], a["baseline_semantic_sim_to_history"],
+             a.get("trivial_canned_semantic_sim_to_history", "n/a")],
+            ["groundedness rate (no invented specifics)", a["rag_groundedness_rate"],
+             "1.0 (verbatim)", "1.0 (says nothing)"],
+            ["length ratio vs historical reply", a["rag_len_ratio_vs_history"], "1.0", "—"],
         ],
     ))
     if "llm_judge" in gen:
@@ -97,16 +102,21 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
     r = esc["primary_rule_engine"]
     b0 = esc["baseline_confidence_only_default"]
     b1 = esc["baseline_confidence_only_best_sweep"]
+    ta = esc.get("baseline_trivial_always_escalate", {})
+    tn = esc.get("baseline_trivial_never_escalate", {})
     parts.append(_md_table(
-        ["metric", "rule engine (ours)", "confidence-only @default", "confidence-only @best sweep"],
+        ["metric", "rule engine (ours)", "confidence-only (simple)", "conf-only @best sweep",
+         "always-escalate (trivial)", "never-escalate (trivial)"],
         [
-            ["precision", r["precision"], b0["precision"], "—"],
-            ["recall", r["recall"], b0["recall"], "—"],
-            ["f1", r["f1"], b0["f1"], b1["f1"]],
-            ["false auto-sends", r["false_auto_send"], b0["false_auto_send"], b1["false_auto_send"]],
-            ["false escalations", r["false_escalate"], b0["false_escalate"], b1["false_escalate"]],
-            ["weighted cost (5x/1x)", r["weighted_cost"], b0["weighted_cost"], b1["weighted_cost"]],
-            ["auto-send rate", r["auto_send_rate"], b0["auto_send_rate"], b1.get("auto_send_rate", "—")],
+            ["f1", r["f1"], b0["f1"], b1["f1"], ta.get("f1", "—"), tn.get("f1", "—")],
+            ["false auto-sends", r["false_auto_send"], b0["false_auto_send"], b1["false_auto_send"],
+             ta.get("false_auto_send", "—"), tn.get("false_auto_send", "—")],
+            ["false escalations", r["false_escalate"], b0["false_escalate"], b1["false_escalate"],
+             ta.get("false_escalate", "—"), tn.get("false_escalate", "—")],
+            ["weighted cost (5x/1x)", r["weighted_cost"], b0["weighted_cost"], b1["weighted_cost"],
+             ta.get("weighted_cost", "—"), tn.get("weighted_cost", "—")],
+            ["auto-send rate", r["auto_send_rate"], b0["auto_send_rate"],
+             b1.get("auto_send_rate", "—"), ta.get("auto_send_rate", "—"), tn.get("auto_send_rate", "—")],
         ],
     ))
     parts.append(
@@ -121,6 +131,7 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
 def run_and_render(
     *,
     limit: int | None = None,
+    gen_limit: int | None = None,
     use_judge: bool | None = None,
     write_md: bool = True,
     labelset_path=None,
@@ -132,6 +143,9 @@ def run_and_render(
     rows = load_labelset(Path(labelset_path)) if labelset_path else load_labelset()
     if limit:
         rows = rows[:limit]
+    # Classification + escalation use no / few LLM calls, so they run on everything;
+    # generation (the expensive suite) can be capped independently.
+    gen_rows = rows[:gen_limit] if gen_limit else rows
     use_judge = (os.getenv("SUPPORT_AGENT_LLM", "auto") != "fake") if use_judge is None else use_judge
 
     from support_agent.classify.model import IntentClassifier
@@ -151,12 +165,13 @@ def run_and_render(
     retriever = ReplyRetriever.build(conversations, embedder=emb)
 
     cls = run_classification.evaluate(rows, run_llm_baseline=True, classifier=classifier)
-    gen = run_generation.evaluate(rows, use_judge=True, conversations=conversations)
+    gen = run_generation.evaluate(gen_rows, use_judge=True, conversations=conversations)
     esc = run_escalation.evaluate(rows, classifier=classifier, retriever=retriever)
 
     meta = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "n_labelset": len(rows),
+        "n_generation": len(gen_rows),
         "labelset": str(labelset_path) if labelset_path else "synthetic",
         "data": data_path or "synthetic sample",
         "embedder": make_embedder().name,
@@ -189,6 +204,8 @@ def run_and_render(
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--gen-limit", type=int, default=None,
+                    help="cap only the (expensive) generation suite at this many rows")
     ap.add_argument("--no-report", action="store_true",
                     help="write eval/results/*.json only; leave docs/report.md untouched")
     ap.add_argument("--labelset", help="path to a labels .jsonl (default: the synthetic set)")
@@ -197,6 +214,7 @@ def main() -> None:
     args = ap.parse_args()
     run_and_render(
         limit=args.limit,
+        gen_limit=args.gen_limit,
         write_md=not args.no_report,
         labelset_path=args.labelset,
         data_path=args.data,
