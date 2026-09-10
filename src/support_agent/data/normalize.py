@@ -40,12 +40,30 @@ def _mask(text: str, pattern: re.Pattern, token: str, counts: dict[str, int]) ->
     return pattern.sub(repl, text)
 
 
+_CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]")
+# common function words in the languages AmazonHelp sees most (es/fr/de/it/nl/pt)
+_NON_EN_STOP = {
+    "que", "de", "la", "el", "los", "las", "un", "una", "para", "por", "con", "no",
+    "mi", "me", "es", "y", "pedido", "paquete", "entrega", "gracias", "hola",
+    "je", "le", "les", "des", "une", "pas", "vous", "pour", "avec", "mon", "ma",
+    "bonjour", "merci", "commande", "livraison", "pourquoi",
+    "ich", "und", "der", "die", "das", "nicht", "mein", "ist", "für", "danke",
+    "il", "di", "che", "non", "per", "sono", "een", "het", "niet", "ik", "van", "voor", "met",
+    "não", "com", "meu", "obrigado",
+}
+
+
 def detect_english(clean: str) -> bool:
-    tokens = re.findall(r"[a-zA-Z']+", clean.lower())
-    if len(tokens) < 4:
-        return True  # too short to judge; let downstream signals handle it
-    hits = sum(1 for t in tokens if t in _EN_STOP)
-    return hits / len(tokens) >= 0.12
+    if _CJK.search(clean):
+        return False  # any CJK content -> not English
+    tokens = re.findall(r"[a-zA-ZÀ-ÿ']+", clean.lower())
+    if len(tokens) < 3:
+        return True  # too short to judge; downstream signals handle it
+    en = sum(1 for t in tokens if t in _EN_STOP)
+    non_en = sum(1 for t in tokens if t in _NON_EN_STOP)
+    if non_en > en and non_en >= 2:
+        return False  # clearly leans to another Latin-script language
+    return en / len(tokens) >= 0.12
 
 
 def normalize(text: str) -> CleanMessage:

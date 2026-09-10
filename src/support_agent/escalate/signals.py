@@ -58,7 +58,22 @@ _SEVERITY = {
     ),
     "theft_loss": re.compile(
         r"\b(stole|stolen|theft|robbed|never (arrived|received|got|came|delivered)|"
-        r"missing|disappeared|lost my|taken without)\b", re.I
+        r"missing|disappeared|lost my|taken without|haven'?t received|hasn'?t (arrived|come)|"
+        r"(shows?|says?|marked|marked as|status) (as )?delivered|delivered but|"
+        r"nothing at (my|the) door|not at (my|the) door|no (sign|package|parcel) (at|by))\b", re.I
+    ),
+    "damaged": re.compile(
+        r"\b(arrived damaged|damaged in transit|came (broken|smashed|crushed|destroyed)|"
+        r"(box|package|parcel) (was |is )?(damaged|crushed|destroyed|open)|"
+        r"ripped|torn|used (item|book|garment)|as new|wrong item)\b", re.I
+    ),
+    "money": re.compile(
+        r"\b(no refund|still.{0,15}refund|refund.{0,15}(not|never|still|yet|pending)|"
+        r"(want|need|get|my|owed a) (my )?refund|not (been )?refunded|reimburs|"
+        r"charged (me )?(twice|again|for)|my money (back|not)|unauthoris|unauthorized|"
+        r"double(-| )charge|didn'?t authorise|suddenly (being )?refunded|"
+        r"gift card.{0,30}(less|short|missing))\b",
+        re.I,
     ),
     "repeated_failure": re.compile(
         r"\b(third time|3rd time|fourth time|again and again|every (day|time|morning)|"

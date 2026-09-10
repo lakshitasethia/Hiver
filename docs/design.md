@@ -162,25 +162,29 @@ Finalised intents (v1): `order_status`, `delivery_issue`, `billing_dispute`,
 
 ## 4. Evaluation harness (`eval/`)
 
-### 4.1 Label set
-`eval/labelset/labels.jsonl` — 150–250 examples sampled **stratified by
-predicted cluster and brand** from a held-out slice the classifier never trains
-on. Each row: `id, brand, text, history, intent (gold), ideal_reply_notes,
-should_escalate (gold), escalation_reason (gold), notes`. Labelled by hand with
-`docs/labeling-guide.md`; every ambiguous call is recorded in `notes`.
+### 4.1 Label sets
+- `eval/labelset/labels.amazon.jsonl` — **200 AmazonHelp messages, hand-labelled**
+  (`intent`, `should_escalate`, a one-line `escalation_reason`, `split` dev/test).
+  Sampled with `make_labelset --data data/amazonhelp.jsonl --unlabelled` then
+  labelled row-by-row against `docs/labeling-guide.md`.
+- `eval/labelset/labels.jsonl` — 200 synthetic rows with generator-truth labels;
+  the CI / no-credentials path.
+- `eval/judge_agreement_pairs.jsonl` — 25 `(message, reply)` pairs with **human**
+  rubric scores, for the judge-agreement check.
 
 ### 4.2 Metrics
 | Task | Automated | LLM-judge |
 |---|---|---|
 | Classification | macro-F1, per-class P/R/F1, confusion matrix, accuracy@confidence buckets | — |
-| Generation | semantic similarity to historical reply, length ratio, groundedness heuristics (no invented order#/date), refusal rate | 1–5 on _helpfulness_, _tone match_, _factual caution_, _would a human send this_ (rubric in `judge.py`), pairwise vs retrieval baseline |
-| Escalation | P/R/F1 on `should_escalate`, cost-weighted error (false-auto-send penalised 5×), decision-curve vs confidence-only | — |
+| Generation | semantic similarity to historical reply, length ratio, groundedness rate (no invented order#/date/amount) | 1–5 on _helpfulness_, _tone match_, _factual caution_, _would a human send this_ (rubric in `judge.py`), pairwise vs the retrieval baseline, plus a **judge-vs-human agreement** run (`judge_agreement.py`: would_send κ, rubric MAE + Pearson r) |
+| Escalation | P/R/F1 on `should_escalate`, cost-weighted error (false-auto-send ×5), auto-send rate, decision-curve sweep | — |
 
-### 4.3 Baselines
-1. **Classification**: LLM zero-shot (`baseline_llm.py`).
-2. **Generation**: nearest-resolved-reply verbatim (`baseline_retrieval.py`).
-3. **Escalation**: confidence-threshold-only (single number, no rules).
-Every headline number is reported **against its baseline**, with the delta.
+### 4.3 Baselines (a trivial and a simple one per task)
+| Task | Trivial | Simple |
+|---|---|---|
+| Classification | majority class (always `delivery_issue`) | LLM zero-shot (`baseline_llm.py`) |
+| Generation | one fixed canned reply for everyone | nearest resolved reply, verbatim (`baseline_retrieval.py`) |
+| Escalation | always-escalate / never-escalate | confidence-threshold only, swept |
 
 ### 4.4 Report generation
 `eval/report.py` runs all three suites on the label set, writes JSON to
@@ -192,11 +196,12 @@ hand-transcribed.
 
 - `make setup` — venv + `pip install -e ".[dev]"` (< 5 min on the target machine;
   < 15 with the model download).
-- `make data` — download Kaggle CSV via `scripts/download_data.sh` (needs
-  `~/.kaggle/kaggle.json`); or `make data-sample` to use the committed
-  `data/sample/` fixture (2k rows, redistributable slice) so the pipeline runs
-  with **no credentials at all**.
+- `make data` — download Kaggle CSV via `scripts/download_data.sh` (needs a
+  Kaggle token), then `make data-amazon` to filter to the focus brand; or
+  `make data-sample` for the committed synthetic fixture (no credentials).
 - `make taxonomy` / `make train` / `make eval` / `make report`.
+- Real AmazonHelp eval:
+  `python -m eval.report --labelset eval/labelset/labels.amazon.jsonl --data data/amazonhelp.jsonl --model models/clf.real.joblib --gen-limit 70`
 - `make demo` — one message end-to-end with `FakeLLM`.
 - `make test` — pytest; runs in CI with `SUPPORT_AGENT_EMBEDDER=hashing` and
   `FakeLLM`, no network.
