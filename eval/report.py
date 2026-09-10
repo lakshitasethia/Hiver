@@ -64,6 +64,12 @@ def _render(cls: dict, gen: dict, esc: dict, meta: dict) -> str:
 
     # Generation
     parts.append("\n### Generation\n")
+    if gen.get("n_gen_failed") or gen.get("n_judge_failed"):
+        parts.append(
+            f"_{gen.get('n_generated', gen['n'])}/{gen['n']} replies generated; "
+            f"{gen.get('n_gen_failed', 0)} generation + {gen.get('n_judge_failed', 0)} judge "
+            f"calls dropped (API errors)._\n"
+        )
     a = gen["automated"]
     parts.append(_md_table(
         ["metric", "RAG (ours)", "retrieval-only (baseline)"],

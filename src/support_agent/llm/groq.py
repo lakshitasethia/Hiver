@@ -31,7 +31,7 @@ class GroqClient:
         model: str | None = None,
         *,
         api_key: str | None = None,
-        timeout_s: float = 60.0,
+        timeout_s: float = 120.0,
         max_retries: int = 6,
         min_interval_s: float | None = None,
     ) -> None:
@@ -110,10 +110,20 @@ class GroqClient:
 
 def _is_retryable(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
-    if status in (429, 500, 502, 503):
+    if status in (408, 409, 425, 429, 500, 502, 503, 504):
+        return True
+    # groq SDK exception class names: APITimeoutError, APIConnectionError,
+    # InternalServerError, RateLimitError
+    if type(exc).__name__ in (
+        "APITimeoutError", "APIConnectionError", "InternalServerError", "RateLimitError"
+    ):
         return True
     text = f"{exc}".lower()
-    return any(s in text for s in ("429", "rate limit", "overloaded", "timeout", "503", "try again"))
+    return any(
+        s in text
+        for s in ("429", "rate limit", "overloaded", "timeout", "timed out",
+                  "connection", "503", "502", "try again")
+    )
 
 
 def _retry_delay(exc: Exception, *, default: float) -> float:

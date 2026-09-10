@@ -42,11 +42,20 @@ def evaluate(rows: list[LabelRow], *, run_llm_baseline: bool = True, classifier=
 
     if run_llm_baseline:
         zs = ZeroShotLLMClassifier()
-        zs_preds = zs.predict_batch(texts)
-        result["baseline_llm_zero_shot"] = multiclass_report(
-            gold, [p.intent for p in zs_preds], list(INTENT_NAMES)
-        )
-        result["delta_macro_f1"] = round(
-            clf_report["macro_f1"] - result["baseline_llm_zero_shot"]["macro_f1"], 4
-        )
+        zs_pred, zs_gold, n_failed = [], [], 0
+        for text, g in zip(texts, gold):
+            try:
+                zs_pred.append(zs.predict_with_confidence(text).intent)
+                zs_gold.append(g)
+            except Exception as exc:  # noqa: BLE001 - skip a flaky call, keep the run alive
+                n_failed += 1
+                print(f"  [zero-shot] {type(exc).__name__}: {exc}")
+        if zs_pred:
+            result["baseline_llm_zero_shot"] = multiclass_report(
+                zs_gold, zs_pred, list(INTENT_NAMES)
+            )
+            result["baseline_llm_zero_shot"]["n_failed"] = n_failed
+            result["delta_macro_f1"] = round(
+                clf_report["macro_f1"] - result["baseline_llm_zero_shot"]["macro_f1"], 4
+            )
     return result

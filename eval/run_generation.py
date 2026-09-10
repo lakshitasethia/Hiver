@@ -40,14 +40,22 @@ def evaluate(
 
     rag_sims, base_sims = [], []
     rag_grounded = 0
+    n_generated = 0
     len_ratios = []
     judge_rows = []
     pairwise = {"candidate": 0, "baseline": 0, "tie": 0}
+    n_gen_failed = n_judge_failed = 0
 
     for r in rows:
         exemplars = retriever.retrieve(r.text, r.brand)
-        rag = gen.generate(r.text, r.brand, exemplars, intent=r.intent)
         base = nearest_reply_baseline(exemplars)
+        try:
+            rag = gen.generate(r.text, r.brand, exemplars, intent=r.intent)
+        except Exception as exc:  # noqa: BLE001 - one flaky API call shouldn't kill the run
+            n_gen_failed += 1
+            print(f"  [gen] {r.id}: {type(exc).__name__}: {exc}")
+            continue
+        n_generated += 1
         ref = ref_map.get(r.id, "")
 
         if ref:
@@ -58,21 +66,28 @@ def evaluate(
         rag_grounded += int(rag.grounded)
 
         if judge is not None:
-            s = judge.score(r.text, rag.text)
-            judge_rows.append(s)
-            if base.text.strip():
-                pw = judge.pairwise(r.text, rag.text, base.text)
-                pairwise[pw["winner"]] += 1
+            try:
+                s = judge.score(r.text, rag.text)
+                judge_rows.append(s)
+                if base.text.strip():
+                    pw = judge.pairwise(r.text, rag.text, base.text)
+                    pairwise[pw["winner"]] += 1
+            except Exception as exc:  # noqa: BLE001
+                n_judge_failed += 1
+                print(f"  [judge] {r.id}: {type(exc).__name__}: {exc}")
 
     def _mean(xs):
         return round(float(np.mean(xs)), 4) if xs else None
 
     out = {
         "n": len(rows),
+        "n_generated": n_generated,
+        "n_gen_failed": n_gen_failed,
+        "n_judge_failed": n_judge_failed,
         "automated": {
             "rag_semantic_sim_to_history": _mean(rag_sims),
             "baseline_semantic_sim_to_history": _mean(base_sims),
-            "rag_groundedness_rate": round(rag_grounded / len(rows), 4) if rows else None,
+            "rag_groundedness_rate": round(rag_grounded / n_generated, 4) if n_generated else None,
             "rag_len_ratio_vs_history": _mean(len_ratios),
         },
     }
