@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
-PY := .venv/bin/python
-PIP := .venv/bin/pip
+# use the project venv when it exists (local dev), else the ambient python (CI)
+PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,python)
+PIP := $(if $(wildcard .venv/bin/pip),.venv/bin/pip,pip)
 VENV_PY ?= python3.12
 
 # Offline, deterministic backends for anything that must run without credentials.
