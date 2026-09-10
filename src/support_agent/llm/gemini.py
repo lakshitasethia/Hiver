@@ -1,26 +1,36 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 
 from .base import LLMResult
+
+_RETRY_AFTER = re.compile(r"retry(?:delay|.{0,12}?in)\D*(\d+(?:\.\d+)?)\s*s", re.I)
 
 
 class GeminiClient:
     """Google AI Studio (Gemini) via the ``google-genai`` SDK.
 
-    Free tier is enough for this project. Reads ``GOOGLE_API_KEY``. Retries on
-    transient errors (429 / 5xx) with exponential backoff, and enforces a hard
-    per-call timeout so a hung request cannot stall an eval run.
+    Reads ``GOOGLE_API_KEY``. On a transient error (429 / 5xx) it retries, and
+    when the response carries a ``retryDelay`` (the free tier's per-minute quota
+    does) it waits exactly that long instead of guessing. An optional
+    ``min_interval_s`` throttle spaces successive calls out — set it via
+    ``SUPPORT_AGENT_LLM_MIN_INTERVAL`` so a long eval run stays under the
+    free-tier requests-per-minute cap without tripping 429s at all.
     """
+
+    # class-level so the throttle spans every client instance in a process
+    _last_call_at: float = 0.0
 
     def __init__(
         self,
-        model: str = "gemini-1.5-flash",
+        model: str = "gemini-flash-latest",
         *,
         api_key: str | None = None,
         timeout_s: float = 30.0,
-        max_retries: int = 3,
+        max_retries: int = 6,
+        min_interval_s: float | None = None,
     ) -> None:
         from google import genai  # imported lazily so the no-key path never needs it
 
@@ -36,6 +46,19 @@ class GeminiClient:
         self.name = f"gemini:{model}"
         self.timeout_s = timeout_s
         self.max_retries = max_retries
+        self.min_interval_s = (
+            float(os.getenv("SUPPORT_AGENT_LLM_MIN_INTERVAL", "0"))
+            if min_interval_s is None
+            else min_interval_s
+        )
+
+    def _throttle(self) -> None:
+        if self.min_interval_s <= 0:
+            return
+        wait = self.min_interval_s - (time.monotonic() - GeminiClient._last_call_at)
+        if wait > 0:
+            time.sleep(wait)
+        GeminiClient._last_call_at = time.monotonic()
 
     def complete(
         self,
@@ -55,6 +78,7 @@ class GeminiClient:
         )
         last_err: Exception | None = None
         for attempt in range(self.max_retries):
+            self._throttle()
             try:
                 resp = self._client.models.generate_content(
                     model=self.model, contents=prompt, config=cfg
@@ -70,10 +94,20 @@ class GeminiClient:
                 last_err = exc
                 if not _is_retryable(exc) or attempt == self.max_retries - 1:
                     raise
-                time.sleep(2**attempt)
+                time.sleep(_retry_delay(exc, default=2**attempt))
         raise last_err  # pragma: no cover
 
 
 def _is_retryable(exc: Exception) -> bool:
     text = f"{exc}".lower()
-    return any(s in text for s in ("429", "resource_exhausted", "500", "503", "unavailable", "timeout"))
+    return any(
+        s in text
+        for s in ("429", "resource_exhausted", "500", "502", "503", "unavailable", "timeout", "deadline")
+    )
+
+
+def _retry_delay(exc: Exception, *, default: float) -> float:
+    m = _RETRY_AFTER.search(str(exc))
+    if m:
+        return min(90.0, float(m.group(1)) + 1.0)  # honour server hint, cap the wait
+    return default

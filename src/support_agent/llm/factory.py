@@ -24,6 +24,7 @@ def make_llm(backend: str | None = None) -> LLMClient:
                 model=CONFIG.llm.model,
                 timeout_s=CONFIG.llm.timeout_s,
                 max_retries=CONFIG.llm.max_retries,
+                min_interval_s=CONFIG.llm.min_interval_s,
             )
         if backend == "gemini":
             raise RuntimeError("SUPPORT_AGENT_LLM=gemini but GOOGLE_API_KEY is unset.")

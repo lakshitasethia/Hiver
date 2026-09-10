@@ -118,7 +118,8 @@ Finalised intents (v1): `order_status`, `delivery_issue`, `billing_dispute`,
 
 ### 3.6 LLM client (`llm/`)
 `LLMClient` protocol: `complete(prompt, *, system, temperature, response_schema)`.
-- `GeminiClient` — Google AI Studio, `gemini-1.5-flash`, free tier. Reads
+- `GeminiClient` — Google AI Studio, `gemini-flash-latest` (an alias that tracks
+  the current Flash model; pin a version via `SUPPORT_AGENT_LLM_MODEL`), free tier. Reads
   `GOOGLE_API_KEY`. Retries with backoff on 429/5xx; hard timeout.
 - `FakeLLM` — deterministic, rule-driven responses for tests and for the
   no-key demo. Keyed off the prompt so classification/judge tests are stable.

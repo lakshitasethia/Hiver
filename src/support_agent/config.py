@@ -45,10 +45,13 @@ class EmbeddingConfig:
 class LLMConfig:
     # "gemini" if GOOGLE_API_KEY is set, else "fake" (deterministic, offline).
     backend: str = os.getenv("SUPPORT_AGENT_LLM", "auto")
-    model: str = os.getenv("SUPPORT_AGENT_LLM_MODEL", "gemini-1.5-flash")
+    model: str = os.getenv("SUPPORT_AGENT_LLM_MODEL", "gemini-flash-latest")
     temperature: float = 0.3
     timeout_s: float = 30.0
-    max_retries: int = 3
+    max_retries: int = 6
+    # seconds to space out successive Gemini calls; raise it (e.g. 13) for a long
+    # eval run so the free tier's ~5 req/min quota is never tripped.
+    min_interval_s: float = float(os.getenv("SUPPORT_AGENT_LLM_MIN_INTERVAL", "0"))
 
 
 @dataclass(frozen=True)
