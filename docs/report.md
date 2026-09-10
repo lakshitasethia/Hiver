@@ -3,7 +3,8 @@
 _Companion to [`design.md`](design.md) (architecture),
 [`decisions.md`](decisions.md) (12 non-obvious choices), and
 [`real-data-notes.md`](real-data-notes.md) (the real 40k-thread Kaggle run —
-weak-label collapse, taxonomy check, real-LLM walkthrough)._
+weak-label collapse, taxonomy check, and a real `n=60` eval on hand-labelled
+data where the escalation rules need re-tuning)._
 
 **What the committed Results block is:** a real evaluation on `n=60` of the
 synthetic gold-labelled set — MiniLM embeddings, generation and the zero-shot
@@ -276,11 +277,14 @@ anything.
   cache identical retrievals, and use a cheaper judge — none of which is
   measured here.
 - **Synthetic data flatters everything.** The committed numbers are on templated
-  text with clean brand voices. On the real Kaggle corpus every score drops —
-  weak-label coverage alone falls 72% → 16% and classifier CV macro-F1 0.99 →
-  0.70 ([`real-data-notes.md`](real-data-notes.md)). Real tweets bring
-  emoji-only messages, code-switching, and multiple issues per message that the
-  synthetic set does not.
+  text with clean brand voices. On a real `n=60` hand-labelled slice
+  ([`real-data-notes.md`](real-data-notes.md) §5) classification macro-F1 falls
+  0.86 → **0.44**, the escalation rule engine goes from *beating* every
+  confidence-only operating point to *losing* to the best one (cost 45 vs 32) —
+  its thresholds were tuned against a strong classifier and a weak one breaks
+  that. Only the generation pairwise result holds up (RAG beats retrieval 45–3).
+  Real tweets bring emoji-only messages, code-switching, and multiple issues per
+  message the synthetic set does not.
 
 ## 7. Future improvement roadmap
 

@@ -101,20 +101,85 @@ What this shows:
   the lexicon scores it as ordinary negative, intent is medium-risk, so it is the
   one message that auto-sends. Arguably it should escalate.
 
-## 5. Why there are no real *quantitative* eval numbers yet
+## 5. Real quantitative eval — `n=60`
 
-Two blockers, both external:
+The first 60 rows of `eval/labelset/labels.real.jsonl` are hand-labelled
+(`intent` + `should_escalate`, per [`labeling-guide.md`](labeling-guide.md);
+per-row reasons kept, borderline calls flagged). All three suites were then run
+on real data — classifier `models/clf.real.joblib`, retrieval over the 40k real
+threads, generation + zero-shot baseline on Groq `gpt-oss-20b`, judge on Groq
+`qwen/qwen3.8-27b`:
 
-1. **No gold labels for the real data.** `make_labelset --unlabelled` produced
-   `eval/labelset/labels.real.unlabelled.jsonl` (200 stratified real messages).
-   Someone has to label `intent` + `should_escalate` by hand per
-   [`labeling-guide.md`](labeling-guide.md) before `run_classification` /
-   `run_escalation` can score anything.
-2. **Gemini free-tier quota.** `gemini-3.x-flash` on the free tier allows **~20
-   requests per day per model**. A full generation + judge + pairwise +
-   zero-shot-baseline eval over 200 examples is ~800 calls. It needs either a
-   paid key or several days of budgeted runs. The client already honours the
-   server's `retryDelay` and has a `SUPPORT_AGENT_LLM_MIN_INTERVAL` throttle for
-   when quota allows a slow run.
+```
+python -m eval.report --labelset eval/labelset/labels.real.jsonl \
+                      --data data/conversations.jsonl \
+                      --model models/clf.real.joblib
+```
 
-Everything except those two inputs is built and demonstrated working above.
+### Classification
+
+| metric | logreg (ours) | zero-shot LLM | delta |
+|---|---|---|---|
+| macro-F1 | **0.443** | **0.566** | −0.122 |
+| accuracy | 0.55 | 0.67 | |
+
+Both models drop hard from the synthetic set (0.86 / 0.94), and the LLM's lead
+widens from ~8 to ~12 F1 points — real phrasing hurts the weak-label-trained
+linear model more. Worst per-class for ours: `technical_bug` recall **0.36**
+(support 14 — the biggest class), `delivery_issue` recall 0.38. `praise_thanks`
+precision 0.30 (over-predicted, as on the real-data walkthrough in §4).
+`billing_dispute` holds up (P 1.0 / R 0.57). `cancellation` and `other_unclear`
+have one example each — noise, not signal.
+
+### Generation
+
+| metric | RAG (ours) | retrieval-only |
+|---|---|---|
+| semantic sim to historical reply | 0.776 | **0.926** |
+| groundedness rate | 0.933 | 1.0 (verbatim) |
+| length ratio vs historical reply | 1.12 | 1.0 |
+| judge: helpfulness / tone / factual-caution | 2.27 / 3.25 / **4.55** | — |
+| judge: would_send rate | 0.10 | — |
+| **blind pairwise vs baseline** | **RAG 45 · baseline 3 · tie 12** | |
+
+The story from the synthetic run gets sharper: the verbatim baseline is *much*
+closer to historical phrasing (0.93 similarity — it is drawn from the same
+corpus) yet loses the blind, order-randomised pairwise **45 to 3**. Similarity to
+history is mimicry, not quality. Absolute rubric scores are low (helpfulness
+2.3) and `would_send` is 0.10 — Qwen is a strict grader and these are
+Twitter-length drafts — but factual-caution is high (4.55): grounding the draft
+in real resolved replies makes it cautious about specifics.
+
+### Escalation
+
+| metric | rule engine (ours) | confidence-only @default | confidence-only @best sweep |
+|---|---|---|---|
+| precision / recall / f1 | 0.57 / 0.84 / 0.68 | 0.53 / 0.65 / 0.59 | — / — / 0.68 |
+| false auto-sends | **5** | 11 | 1 |
+| false escalations | 20 | 17 | 27 |
+| weighted cost (5×/1×) | **45** | 72 | **32** |
+
+**This is the honest hit.** On synthetic data the rule engine dominated every
+confidence-only operating point (cost 12 vs 36–76). On real data it does *not*:
+its thresholds were tuned against a strong classifier, and with the real
+classifier at macro-F1 0.44 the confidence signal is too noisy — 5 escalation-
+worthy messages are confidently misclassified into a low-risk intent with decent
+retrieval, so no rule fires and they auto-send. A confidence-only threshold swept
+to 0.95 beats it on cost (32 vs 45) by escalating almost everything.
+_Fix path:_ re-run `python -m eval.tune_thresholds` on a real dev split (the
+committed `labels.real.jsonl` reserves 18 rows for it), lower `low_confidence`,
+and add a rule that escalates whenever the top-2 intents disagree on risk tier.
+The rule engine still keeps `false_auto_send` lower than the confidence-only
+*default* (5 vs 11) — it is the calibration, not the approach, that needs work.
+
+### What is still pending
+
+- **Scale.** `n=60` (only 42 in the test split). Label more of
+  `labels.real.unlabelled.jsonl` with `python -m eval.label_cli` and re-run for
+  tighter numbers; `cancellation` / `order_status` / `other_unclear` need more
+  examples before their per-class scores mean anything.
+- **Throughput.** Groq's free tier throttles on tokens/min, so each run of ~240
+  calls takes ~25–40 min. A paid key removes this.
+- **Label review.** The 60 labels were assigned by reading each message against
+  the guide; a second annotator (or the guide's self-diff pass) would quantify
+  inter-annotator noise, which is currently unmeasured.
