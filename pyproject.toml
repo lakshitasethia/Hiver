@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "support-agent"
+version = "0.1.0"
+description = "Transparent AI customer-support agent: intent classification + RAG replies + rule-based escalation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scikit-learn>=1.4",
+    "sentence-transformers>=2.7",
+    "google-genai>=1.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+support-agent = "support_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# E501: long lines are fine here. B905: every zip() in this codebase is over
+# lists that are equal-length by construction; strict= adds noise, not safety.
+ignore = ["E501", "B905"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+# put the repo root on sys.path so `import eval` (the harness package at the
+# repo root, deliberately not installed) resolves under a bare `pytest` too.
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning"]
